@@ -1,0 +1,24 @@
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# direnv
+.direnv/
+
+# Nix
+result
+
+# wasm-pack output at repo root
+pkg/
+
+# Example outputs
+out.png
+
+# Rust build artifacts
+target/
+blueprint/target/
+puzzle-wasm/target/
+
+# wasm-pack output when run from crate dir
+puzzle-wasm/pkg/

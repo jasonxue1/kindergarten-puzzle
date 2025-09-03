@@ -1,0 +1,14 @@
+{
+  "shapes": [
+    { "id": "circle_d30", "type": "circle", "d": 30 },
+    { "id": "square_30", "type": "rect", "w": 30, "h": 30 },
+    { "id": "rect_30x60", "type": "rect", "w": 30, "h": 60 },
+    { "id": "hex_side30", "type": "regular_polygon", "n": 6, "side": 30 },
+    { "id": "pent_side30", "type": "regular_polygon", "n": 5, "side": 30 },
+    { "id": "rt_30x60", "type": "right_triangle", "a": 30, "b": 60 },
+    { "id": "trap_60_30_30", "type": "isosceles_trapezoid", "base_bottom": 60, "base_top": 30, "height": 30 },
+    { "id": "para_45_15_30", "type": "parallelogram", "base": 45, "offset_top": 15, "height": 30 },
+    { "id": "tri_eq_30", "type": "equilateral_triangle", "side": 30 }
+  ]
+}
+

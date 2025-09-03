@@ -1,0 +1,16 @@
+{
+  "units": "mm",
+  "board": { "type": "rect_with_quarter_round_cut", "w": 113, "h": 123, "cut_corner": "topright", "r": 15 },
+  "counts": {
+    "circle_d30": 1,
+    "square_30": 1,
+    "rect_30x60": 1,
+    "hex_side30": 1,
+    "pent_side30": 1,
+    "rt_30x60": 2,
+    "trap_60_30_30": 1,
+    "para_45_15_30": 1,
+    "tri_eq_30": 2
+  }
+}
+
