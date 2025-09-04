@@ -182,6 +182,22 @@ fn from_screen(x: f64, y: f64, canvas_h: f64, scale: f64, offset: (f64, f64)) ->
     }
 }
 
+fn set_fill_style(ctx: &CanvasRenderingContext2d, color: &str) {
+    let _ = js_sys::Reflect::set(
+        ctx.as_ref(),
+        &JsValue::from_str("fillStyle"),
+        &JsValue::from_str(color),
+    );
+}
+
+fn set_stroke_style(ctx: &CanvasRenderingContext2d, color: &str) {
+    let _ = js_sys::Reflect::set(
+        ctx.as_ref(),
+        &JsValue::from_str("strokeStyle"),
+        &JsValue::from_str(color),
+    );
+}
+
 fn rotate_point(p: Point, c: Point, ang: f64, flip: bool) -> Point {
     let mut dx = p.x - c.x;
     let dy = p.y - c.y;
@@ -441,19 +457,16 @@ fn draw_colored_polygon(
     }
     ctx.close_path();
     ctx.set_line_width(if for_hit { 10.0 } else { 1.6 });
-    #[allow(deprecated)]
-    {
-        if !for_hit {
-            ctx.set_fill_style(&JsValue::from_str(color));
-            ctx.fill();
-            ctx.set_stroke_style(&JsValue::from_str("#333"));
-            ctx.stroke();
-        } else {
-            ctx.set_fill_style(&JsValue::from_str("#000"));
-            ctx.set_stroke_style(&JsValue::from_str("#000"));
-            ctx.fill();
-            ctx.stroke();
-        }
+    if !for_hit {
+        set_fill_style(ctx, color);
+        ctx.fill();
+        set_stroke_style(ctx, "#333");
+        ctx.stroke();
+    } else {
+        set_fill_style(ctx, "#000");
+        set_stroke_style(ctx, "#000");
+        ctx.fill();
+        ctx.stroke();
     }
 }
 
@@ -513,8 +526,7 @@ fn draw_board(state: &mut State) {
         && let Some(geom) = board_to_geom(b)
     {
         state.ctx.set_line_width(2.4);
-        #[allow(deprecated)]
-        state.ctx.set_stroke_style(&JsValue::from_str("#222"));
+        set_stroke_style(&state.ctx, "#222");
         draw_colored_polygon(
             &state.ctx,
             state.canvas.height() as f64,
@@ -1061,90 +1073,6 @@ fn encode_png_deterministic_to_vec(
         writer.write_image_data(pixmap.data())?;
     }
     Ok(buf)
-}
-
-fn translate_geom(pts: &[Point], dx: f64, dy: f64) -> Vec<Point> {
-    pts.iter()
-        .map(|p| Point {
-            x: p.x + dx,
-            y: p.y + dy,
-        })
-        .collect()
-}
-
-fn bounds_of(pts: &[Point]) -> (f64, f64, f64, f64) {
-    let mut minx = f64::INFINITY;
-    let mut miny = f64::INFINITY;
-    let mut maxx = f64::NEG_INFINITY;
-    let mut maxy = f64::NEG_INFINITY;
-    for p in pts {
-        minx = minx.min(p.x);
-        miny = miny.min(p.y);
-        maxx = maxx.max(p.x);
-        maxy = maxy.max(p.y);
-    }
-    (minx, miny, maxx, maxy)
-}
-
-fn draw_dimension_mm(
-    ctx: &CanvasRenderingContext2d,
-    canvas_h: f64,
-    scale: f64,
-    offset: (f64, f64),
-    a_mm: (f64, f64),
-    b_mm: (f64, f64),
-    label: &str,
-) {
-    let (ax, ay) = to_screen(
-        Point {
-            x: a_mm.0,
-            y: a_mm.1,
-        },
-        canvas_h,
-        scale,
-        offset,
-    );
-    let (bx, by) = to_screen(
-        Point {
-            x: b_mm.0,
-            y: b_mm.1,
-        },
-        canvas_h,
-        scale,
-        offset,
-    );
-    #[allow(deprecated)]
-    ctx.set_stroke_style(&JsValue::from_str("#999"));
-    #[allow(deprecated)]
-    ctx.set_fill_style(&JsValue::from_str("#333"));
-    ctx.begin_path();
-    ctx.move_to(ax, ay);
-    ctx.line_to(bx, by);
-    ctx.stroke();
-    // Arrow heads
-    draw_arrow_head(ctx, ax, ay, bx, by);
-    draw_arrow_head(ctx, bx, by, ax, ay);
-    // Label at midpoint
-    let mx = (ax + bx) / 2.0;
-    let my = (ay + by) / 2.0;
-    let _ = ctx.fill_text(label, mx + 4.0, my - 4.0);
-    #[allow(deprecated)]
-    ctx.set_stroke_style(&JsValue::from_str("#333"));
-}
-
-fn draw_arrow_head(ctx: &CanvasRenderingContext2d, x0: f64, y0: f64, x1: f64, y1: f64) {
-    let ang = (y1 - y0).atan2(x1 - x0);
-    let len = 6.0;
-    let a1 = ang + std::f64::consts::PI - 0.6;
-    let a2 = ang + std::f64::consts::PI + 0.6;
-    let p1 = (x1 + len * a1.cos(), y1 + len * a1.sin());
-    let p2 = (x1 + len * a2.cos(), y1 + len * a2.sin());
-    ctx.begin_path();
-    ctx.move_to(x1, y1);
-    ctx.line_to(p1.0, p1.1);
-    ctx.move_to(x1, y1);
-    ctx.line_to(p2.0, p2.1);
-    ctx.stroke();
 }
 
 fn init_canvas(
