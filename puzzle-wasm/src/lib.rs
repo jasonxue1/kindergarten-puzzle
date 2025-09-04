@@ -7,9 +7,12 @@ use serde::{Deserialize, Serialize};
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use web_sys::{
-    Blob, CanvasRenderingContext2d, Document, Event, FileReader, HtmlCanvasElement, HtmlElement,
-    HtmlInputElement, KeyboardEvent, MouseEvent, Url, Window,
+    Blob, CanvasRenderingContext2d, Document, HtmlCanvasElement, HtmlElement, KeyboardEvent,
+    MouseEvent, Url, Window,
 };
+
+mod canvas;
+mod upload;
 
 const DEFAULT_MM2PX: f64 = 3.0;
 
@@ -182,21 +185,7 @@ fn from_screen(x: f64, y: f64, canvas_h: f64, scale: f64, offset: (f64, f64)) ->
     }
 }
 
-fn set_fill_style(ctx: &CanvasRenderingContext2d, color: &str) {
-    let _ = js_sys::Reflect::set(
-        ctx.as_ref(),
-        &JsValue::from_str("fillStyle"),
-        &JsValue::from_str(color),
-    );
-}
-
-fn set_stroke_style(ctx: &CanvasRenderingContext2d, color: &str) {
-    let _ = js_sys::Reflect::set(
-        ctx.as_ref(),
-        &JsValue::from_str("strokeStyle"),
-        &JsValue::from_str(color),
-    );
-}
+use crate::canvas::{set_fill_style, set_stroke_style};
 
 fn rotate_point(p: Point, c: Point, ang: f64, flip: bool) -> Point {
     let mut dx = p.x - c.x;
@@ -646,40 +635,7 @@ fn save_text_as_file(document: &Document, filename: &str, text: &str) -> Result<
 fn attach_ui(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
     let doc = state.borrow().document.clone();
     // File input
-    if let Some(input) = doc.get_element_by_id("file") {
-        let input: HtmlInputElement = input.dyn_into().unwrap();
-        let st = state.clone();
-        // Clone references that will be moved into closures
-        let input_for_closure = input.clone();
-        let onchange = Closure::<dyn FnMut(Event)>::wrap(Box::new(move |_e: Event| {
-            let files = input_for_closure.files();
-            if files.is_none() {
-                return;
-            }
-            let files = files.unwrap();
-            if files.length() == 0 {
-                return;
-            }
-            let file = files.item(0).unwrap();
-            let reader = FileReader::new().unwrap();
-            let st2 = st.clone();
-            // Clone the FileReader for use inside the onload closure
-            let reader_for_closure = reader.clone();
-            let onload = Closure::<dyn FnMut(Event)>::wrap(Box::new(move |_ev: Event| {
-                let result = reader_for_closure.result().unwrap();
-                let text = result.as_string().unwrap_or_default();
-                if let Ok(p) = serde_json::from_str::<Puzzle>(&text) {
-                    st2.borrow_mut().data = p;
-                    draw(&mut st2.borrow_mut());
-                }
-            }));
-            reader.set_onload(Some(onload.as_ref().unchecked_ref()));
-            reader.read_as_text(&file).unwrap();
-            onload.forget();
-        }));
-        input.set_onchange(Some(onchange.as_ref().unchecked_ref()));
-        onchange.forget();
-    }
+    upload::attach_file_input(state.clone())?;
 
     // Export PNG (blueprint; deterministic)
     if let Some(btn) = doc.get_element_by_id("exportPng") {

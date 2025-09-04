@@ -44,10 +44,6 @@
             pkgs.shfmt
             # add mado and mdsf
           ];
-          shellHook = ''
-            export CC=clang
-            export CXX=clang++
-          '';
         };
       }
     );
