@@ -1,0 +1,12 @@
+[package]
+name = "fonts"
+version = "0.1.0"
+edition = "2024"
+build = "build.rs"
+
+[lib]
+name = "fonts"
+path = "src/lib.rs"
+
+[build-dependencies]
+zip = { version = "0.6", default-features = false, features = ["deflate"] }

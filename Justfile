@@ -30,8 +30,9 @@ watch:
     watchexec -e rs -w {{ CRATE_DIR }} -r -- just build
 
 # Export blueprint PNG from a JSON file
-# Usage: just export path/to/puzzle.json out.png [px_per_mm] [shapes.json]
-export json out="out.png" px_per_mm="6" shapes_path="":
+
+# Usage: just png path/to/puzzle.json out.png [px_per_mm] [shapes.json]
+png json out="out.png" px_per_mm="6" shapes_path="":
     out_path="{{ out }}"; \
     rm -f "${out_path}"; \
     if [ -n "{{ shapes_path }}" ]; then \
@@ -39,3 +40,36 @@ export json out="out.png" px_per_mm="6" shapes_path="":
     else \
       cargo run --release --manifest-path blueprint/Cargo.toml -- {{ json }} "${out_path}" {{ px_per_mm }}; \
     fi
+
+# Export by id: reads puzzle/<id>.json to out.png
+
+# Usage: just png-id k11 out.png [px_per_mm]
+png-id id out="out.png" px_per_mm="6":
+    just png "puzzle/{{ id }}.json" "{{ out }}" {{ px_per_mm }}
+
+# Format all code and content
+fmt:
+    # 1) Rust
+    cargo fmt --all
+    # 2) TOML (Cargo.toml, etc.)
+    taplo format
+    # 3) Web assets (HTML/JS/CSS/JSON/YML) via prettierd
+    prettier --write .
+    # 4) Markdown via mdsf (already in PATH)
+    mdsf format .
+    # 5) Nix files via alejandra
+    alejandra -q .
+
+# Lint sources
+lint:
+    # 1) TOML lint
+    taplo check
+    # 2) Rust lint
+    cargo clippy --workspace --all-targets --all-features -- -D warnings
+    # 3) Rust type-check
+    cargo check --workspace
+    # 4) Markdown lint (mado.toml)
+    mado check
+    # Lint Nix code: report unused expressions/bindings
+    deadnix --fail .
+    # Lint Nix via nixd (LSP). This target verifies availability.

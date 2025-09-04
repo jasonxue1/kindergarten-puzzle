@@ -2,36 +2,146 @@
 <meta charset="utf-8" />
 <title>Kindergarten Puzzle (WASM)</title>
 <style>
-  body { margin: 0; font-family: system-ui, Segoe UI, Arial; }
-  #bar { display: flex; gap: 8px; align-items: center; padding: 8px; border-bottom: 1px solid #ddd; }
-  #help { margin-left: auto; color: #666; }
-  canvas { display: block; background: #fafafa; }
-  button, input { font: inherit; }
-  #chooser { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,.35); }
-  #chooser .card { background: #fff; padding: 20px 24px; border-radius: 12px; width: 520px; box-shadow: 0 12px 32px rgba(0,0,0,.3); }
-  #chooser h2 { margin: 0 0 12px 0; font-weight: 600; }
-  #chooser ul { list-style: none; padding: 0; margin: 0; }
-  #chooser li { padding: 8px 0; border-bottom: 1px solid #eee; }
-  #chooser a { color: #0a66c2; text-decoration: none; }
+  body {
+    margin: 0;
+    font-family:
+      system-ui,
+      Segoe UI,
+      Arial;
+  }
+  #bar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 8px;
+    border-bottom: 1px solid #ddd;
+  }
+  #help {
+    margin-left: auto;
+    color: #666;
+  }
+  canvas {
+    display: block;
+    background: #fafafa;
+  }
+  button,
+  input {
+    font: inherit;
+  }
+  #chooser {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.35);
+  }
+  #chooser .card {
+    background: #fff;
+    padding: 20px 24px;
+    border-radius: 12px;
+    width: 520px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+  }
+  #chooser h2 {
+    margin: 0 0 12px 0;
+    font-weight: 600;
+  }
+  #chooser ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  #chooser li {
+    padding: 8px 0;
+    border-bottom: 1px solid #eee;
+  }
+  #chooser a {
+    color: #0a66c2;
+    text-decoration: none;
+  }
 </style>
 <div id="bar">
+  <button id="homeBtn" style="display: none">返回主页</button>
+  <button id="exportPng">下载 PNG</button>
   <input type="file" id="file" accept=".json" />
   <!-- 导出/保存已移除；网页端仅用于交互拼图 -->
-  <span id="help">拖拽；Q/E/滚轮旋转；F镜像</span>
-  <span style="margin-left:12px;color:#999">Load: <a href="?p=k11">k11</a></span>
+  <span id="help"
+    >拖拽；Q/E旋转（S快/慢）；L切换限制移动；按住Shift临时限制；滚轮微调；F镜像</span
+  >
 </div>
-<canvas id="cv" width="1200" height="800" style="box-shadow: 0 8px 24px rgba(0,0,0,.2); border-radius: 12px; background: #fff"></canvas>
+<canvas
+  id="cv"
+  width="1200"
+  height="800"
+  style="
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+    border-radius: 12px;
+    background: #fff;
+  "
+></canvas>
 
 <script type="module">
   // Build wasm to ./pkg then commit it for GitHub Pages
   // wasm-pack build --target web --release --out-dir ./pkg puzzle-wasm
-  import init from './pkg/puzzle_wasm.js';
+  import init from "./pkg/puzzle_wasm.js";
   init();
-  // Use query param ?p=name to load ./puzzles/name.json
-  // If no query param present, show a simple chooser
-  if (!location.search) {
-    const ch = document.getElementById('chooser');
-    if (ch) ch.style.display = 'flex';
+
+  // Toolbar home button: visible only when a puzzle is opened
+  const params = new URLSearchParams(location.search);
+  const homeBtn = document.getElementById("homeBtn");
+  if (homeBtn) {
+    if (params.get("p")) {
+      homeBtn.style.display = "inline-block";
+      homeBtn.addEventListener("click", () => {
+        location.href = "./";
+      });
+    }
+  }
+
+  // If no query param present, show chooser and populate from puzzles.json
+  if (!params.get("p")) {
+    const ch = document.getElementById("chooser");
+    if (ch) ch.style.display = "flex";
+    try {
+      const res = await fetch("./puzzles.json");
+      if (res.ok) {
+        const list = await res.json();
+        const ul = document.querySelector("#chooser ul");
+        if (Array.isArray(list) && ul) {
+          ul.innerHTML = "";
+          for (const item of list) {
+            const li = document.createElement("li");
+            const a = document.createElement("a");
+            a.href = `?p=${encodeURIComponent(item.id)}`;
+            a.textContent = item.title || item.id;
+            li.appendChild(a);
+            if (item.desc) {
+              const span = document.createElement("span");
+              span.textContent = ` — ${item.desc}`;
+              span.style.color = "#666";
+              span.style.marginLeft = "6px";
+              li.appendChild(span);
+            }
+            ul.appendChild(li);
+          }
+          // Extra options
+          const liFile = document.createElement("li");
+          liFile.innerHTML =
+            '<a href="#" onclick="document.getElementById(\'file\').click(); return false;">从本地加载 JSON…</a>';
+          ul.appendChild(liFile);
+          const liDir = document.createElement("li");
+          liDir.innerHTML =
+            '<a href="puzzle/" target="_blank">查看 puzzle 目录</a>';
+          ul.appendChild(liDir);
+          const liBack = document.createElement("li");
+          liBack.innerHTML = '<a href="./">回到站点目录</a>';
+          ul.appendChild(liBack);
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to load puzzles.json", e);
+    }
   }
 </script>
 
@@ -40,10 +150,22 @@
     <h2>选择拼图</h2>
     <ul>
       <li><a href="?p=k11">k11（示例）</a></li>
-      <li><a href="#" onclick="document.getElementById('file').click(); return false;">从本地加载 JSON…</a></li>
+      <li>
+        <a
+          href="#"
+          onclick="document.getElementById('file').click(); return false;"
+          >从本地加载 JSON…</a
+        >
+      </li>
       <li><a href="puzzle/" target="_blank">查看 puzzle 目录</a></li>
       <li><a href="./">回到站点目录</a></li>
     </ul>
   </div>
-  <script>document.addEventListener('change', e => { if (e.target && e.target.id === 'file') { document.getElementById('chooser').style.display='none'; } });</script>
+  <script>
+    document.addEventListener("change", (e) => {
+      if (e.target && e.target.id === "file") {
+        document.getElementById("chooser").style.display = "none";
+      }
+    });
+  </script>
 </div>

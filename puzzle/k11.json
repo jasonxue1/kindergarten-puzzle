@@ -1,6 +1,13 @@
 {
   "units": "mm",
-  "board": { "type": "rect_with_quarter_round_cut", "w": 113, "h": 123, "cut_corner": "topright", "r": 15 },
+  "board": {
+    "type": "rect_with_quarter_round_cut",
+    "w": 113,
+    "h": 123,
+    "cut_corner": "topright",
+    "r": 15,
+    "label": "外框 113×123mm（R15）"
+  },
   "counts": {
     "circle_d30": 1,
     "square_30": 1,
@@ -13,4 +20,3 @@
     "tri_eq_30": 2
   }
 }
-

@@ -2,9 +2,10 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use js_sys::Array;
+use png::{BitDepth, ColorType, Compression, Encoder, FilterType};
 use serde::{Deserialize, Serialize};
-use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
+use wasm_bindgen::prelude::*;
 use web_sys::{
     Blob, CanvasRenderingContext2d, Document, Event, FileReader, HtmlCanvasElement, HtmlElement,
     HtmlInputElement, KeyboardEvent, MouseEvent, Url, Window,
@@ -149,12 +150,19 @@ struct State {
     // view transform
     scale: f64,         // px per mm
     offset: (f64, f64), // (ox, oy) in px from bottom-left
-    // continuous rotation control (deg per second, +cw)
+    // continuous rotation control (deg per second, +ccw)
     rot_vel: f64,
+    // speed control for Q/E
+    slow_mode: bool,     // false = fast, true = slow
+    rot_speed_fast: f64, // deg per second for fast mode
+    rot_speed_slow: f64, // deg per second for slow mode
+    // movement constraints
+    restrict_mode: bool, // L toggles: prevent overlaps with pieces/border while moving
+    shift_down: bool,    // temporary constraint while Shift held
 }
 
 thread_local! {
-    static STATE: RefCell<Option<Rc<RefCell<State>>>> = RefCell::new(None);
+    static STATE: RefCell<Option<Rc<RefCell<State>>>> = const { RefCell::new(None) };
 }
 
 fn log(s: &str) {
@@ -176,7 +184,7 @@ fn from_screen(x: f64, y: f64, canvas_h: f64, scale: f64, offset: (f64, f64)) ->
 
 fn rotate_point(p: Point, c: Point, ang: f64, flip: bool) -> Point {
     let mut dx = p.x - c.x;
-    let mut dy = p.y - c.y;
+    let dy = p.y - c.y;
     if flip {
         dx = -dx;
     }
@@ -399,7 +407,7 @@ fn draw(state: &mut State) {
         let (geom, ctr) = piece_geom(p);
         p.__geom = Some(geom.clone());
         p.__ctr = Some(ctr);
-        let color = piece_color(i);
+        let color = puzzle_core::piece_color(i);
         draw_colored_polygon(
             &state.ctx,
             height,
@@ -426,23 +434,26 @@ fn draw_colored_polygon(
     }
     ctx.begin_path();
     let (sx, sy) = to_screen(pts[0], canvas_h, scale, offset);
-    let _ = ctx.move_to(sx, sy);
+    ctx.move_to(sx, sy);
     for p in &pts[1..] {
         let (x, y) = to_screen(*p, canvas_h, scale, offset);
-        let _ = ctx.line_to(x, y);
+        ctx.line_to(x, y);
     }
-    let _ = ctx.close_path();
+    ctx.close_path();
     ctx.set_line_width(if for_hit { 10.0 } else { 1.6 });
-    if !for_hit {
-        ctx.set_fill_style(&JsValue::from_str(color));
-        let _ = ctx.fill();
-        ctx.set_stroke_style(&JsValue::from_str("#333"));
-        let _ = ctx.stroke();
-    } else {
-        ctx.set_fill_style(&JsValue::from_str("#000"));
-        ctx.set_stroke_style(&JsValue::from_str("#000"));
-        let _ = ctx.fill();
-        let _ = ctx.stroke();
+    #[allow(deprecated)]
+    {
+        if !for_hit {
+            ctx.set_fill_style(&JsValue::from_str(color));
+            ctx.fill();
+            ctx.set_stroke_style(&JsValue::from_str("#333"));
+            ctx.stroke();
+        } else {
+            ctx.set_fill_style(&JsValue::from_str("#000"));
+            ctx.set_stroke_style(&JsValue::from_str("#000"));
+            ctx.fill();
+            ctx.stroke();
+        }
     }
 }
 
@@ -491,31 +502,28 @@ fn board_to_geom(board: &Board) -> Option<Vec<Point>> {
                 .into_iter()
                 .map(|v| Point { x: v[0], y: v[1] })
                 .collect::<Vec<_>>();
-            if pts.is_empty() {
-                None
-            } else {
-                Some(pts)
-            }
+            if pts.is_empty() { None } else { Some(pts) }
         }
         _ => None,
     }
 }
 
 fn draw_board(state: &mut State) {
-    if let Some(b) = &state.data.board {
-        if let Some(geom) = board_to_geom(b) {
-            state.ctx.set_line_width(2.4);
-            state.ctx.set_stroke_style(&JsValue::from_str("#222"));
-            draw_colored_polygon(
-                &state.ctx,
-                state.canvas.height() as f64,
-                &geom,
-                false,
-                state.scale,
-                state.offset,
-                "#ffffff",
-            );
-        }
+    if let Some(b) = &state.data.board
+        && let Some(geom) = board_to_geom(b)
+    {
+        state.ctx.set_line_width(2.4);
+        #[allow(deprecated)]
+        state.ctx.set_stroke_style(&JsValue::from_str("#222"));
+        draw_colored_polygon(
+            &state.ctx,
+            state.canvas.height() as f64,
+            &geom,
+            false,
+            state.scale,
+            state.offset,
+            "#ffffff",
+        );
     }
 }
 
@@ -606,65 +614,9 @@ fn polygons_intersect(a: &[Point], b: &[Point]) -> bool {
     false
 }
 
-fn piece_color(i: usize) -> String {
-    let h = ((i as f64) * 47.0) % 360.0;
-    format!("hsl({:.0}, 65%, 75%)", h)
-}
+// color helper moved to puzzle-core
 
-fn svg_path_from_points(pts: &[Point], canvas_h: f64, scale: f64, offset: (f64, f64)) -> String {
-    if pts.is_empty() {
-        return String::new();
-    }
-    let mut s = String::new();
-    let (x0, y0) = to_screen(pts[0], canvas_h, scale, offset);
-    s.push_str(&format!("M {} {}", x0, y0));
-    for p in &pts[1..] {
-        let (x, y) = to_screen(*p, canvas_h, scale, offset);
-        s.push_str(&format!(" L {} {}", x, y));
-    }
-    s.push_str(" Z");
-    s
-}
-
-fn to_svg(state: &State) -> String {
-    let wmm = (state.canvas.width() as f64 / state.scale);
-    let hmm = (state.canvas.height() as f64 / state.scale);
-    let mut s = String::new();
-    s.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
-    s.push_str(&format!(
-        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{:.2}mm\" height=\"{:.2}mm\" viewBox=\"0 0 {} {}\">\n",
-        wmm,
-        hmm,
-        state.canvas.width(),
-        state.canvas.height()
-    ));
-    if let Some(b) = &state.data.board {
-        if let Some(geom) = board_to_geom(b) {
-            let d = svg_path_from_points(
-                &geom,
-                state.canvas.height() as f64,
-                state.scale,
-                state.offset,
-            );
-            s.push_str(&format!(
-                "<path d=\"{}\" fill=\"none\" stroke=\"#222\" stroke-width=\"2\"/>\n",
-                d
-            ));
-        }
-    }
-    for p in &state.data.pieces {
-        if let Some(g) = &p.__geom {
-            let d =
-                svg_path_from_points(g, state.canvas.height() as f64, state.scale, state.offset);
-            s.push_str(&format!(
-                "<path d=\"{}\" fill=\"#ffffff\" stroke=\"#333\" stroke-width=\"1.5\"/>\n",
-                d
-            ));
-        }
-    }
-    s.push_str("</svg>");
-    s
-}
+// (removed unused SVG helpers that triggered dead-code lints)
 
 fn save_text_as_file(document: &Document, filename: &str, text: &str) -> Result<(), JsValue> {
     let array = Array::new();
@@ -717,7 +669,7 @@ fn attach_ui(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
         onchange.forget();
     }
 
-    // Export PNG (blueprint)
+    // Export PNG (blueprint; deterministic)
     if let Some(btn) = doc.get_element_by_id("exportPng") {
         let btn: HtmlElement = btn.dyn_into().unwrap();
         let st = state.clone();
@@ -749,18 +701,18 @@ fn attach_ui(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
             let h = s.canvas.height() as f64;
             // find topmost piece under cursor
             for i in (0..s.data.pieces.len()).rev() {
-                if let Some(ref geom) = s.data.pieces[i].__geom {
-                    if point_in_polygon(pt, geom, h, s.scale, s.offset) {
-                        s.dragging_idx = Some(i);
-                        let ctr = s.data.pieces[i].__ctr.unwrap_or(Point { x: 0.0, y: 0.0 });
-                        let (sx, sy) = to_screen(ctr, h, s.scale, s.offset);
-                        s.drag_off = (pt.0 - sx, pt.1 - sy);
-                        // bring to top
-                        let it = s.data.pieces.remove(i);
-                        s.data.pieces.push(it);
-                        s.dragging_idx = Some(s.data.pieces.len() - 1);
-                        break;
-                    }
+                if let Some(ref geom) = s.data.pieces[i].__geom
+                    && point_in_polygon(pt, geom, h, s.scale, s.offset)
+                {
+                    s.dragging_idx = Some(i);
+                    let ctr = s.data.pieces[i].__ctr.unwrap_or(Point { x: 0.0, y: 0.0 });
+                    let (sx, sy) = to_screen(ctr, h, s.scale, s.offset);
+                    s.drag_off = (pt.0 - sx, pt.1 - sy);
+                    // bring to top
+                    let it = s.data.pieces.remove(i);
+                    s.data.pieces.push(it);
+                    s.dragging_idx = Some(s.data.pieces.len() - 1);
+                    break;
                 }
             }
         }));
@@ -802,10 +754,45 @@ fn attach_ui(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
                         pclone.at = Some([dx, dy]);
                     }
                     let (cand_geom, _c2) = piece_geom(&pclone);
-                    // allow board intersection as requested
-                    let board_ok = true;
-                    // Allow overlapping with other pieces (取消不能重合的限制)
-                    if board_ok {
+                    let constraints_active = s.restrict_mode || s.shift_down;
+                    let mut board_ok = true;
+                    if constraints_active
+                        && let Some(b) = &s.data.board
+                        && let Some(board_geom) = board_to_geom(b)
+                    {
+                        // allow fully inside or fully outside; disallow only when crossing edges
+                        let an = cand_geom.len();
+                        let bn = board_geom.len();
+                        let mut edges_cross = false;
+                        'outer: for i in 0..an {
+                            let a1 = cand_geom[i];
+                            let a2 = cand_geom[(i + 1) % an];
+                            for j in 0..bn {
+                                let b1 = board_geom[j];
+                                let b2 = board_geom[(j + 1) % bn];
+                                if segments_intersect(a1, a2, b1, b2) {
+                                    edges_cross = true;
+                                    break 'outer;
+                                }
+                            }
+                        }
+                        board_ok = !edges_cross;
+                    }
+                    let mut pieces_ok = true;
+                    if constraints_active && board_ok {
+                        for j in 0..s.data.pieces.len() {
+                            if j == idx {
+                                continue;
+                            }
+                            if let Some(ref og) = s.data.pieces[j].__geom
+                                && polygons_intersect(&cand_geom, og)
+                            {
+                                pieces_ok = false;
+                                break;
+                            }
+                        }
+                    }
+                    if !constraints_active || (board_ok && pieces_ok) {
                         let p = &mut s.data.pieces[idx];
                         if let Some(mut at) = p.at {
                             at[0] += dx;
@@ -857,16 +844,57 @@ fn attach_ui(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
                 let idx = s.data.pieces.len() - 1;
                 let p = &mut s.data.pieces[idx];
                 match key.as_str() {
-                    // swap: e clockwise, q counter-clockwise, continuous while held
+                    // q counter-clockwise (3→12→9→6), e clockwise; speed depends on mode
                     "q" => {
-                        s.rot_vel = -180.0;
+                        let speed = if s.slow_mode {
+                            s.rot_speed_slow
+                        } else {
+                            s.rot_speed_fast
+                        };
+                        s.rot_vel = speed;
                     }
                     "e" => {
-                        s.rot_vel = 180.0;
+                        let speed = if s.slow_mode {
+                            s.rot_speed_slow
+                        } else {
+                            s.rot_speed_fast
+                        };
+                        s.rot_vel = -speed;
+                    }
+                    // toggle slow/fast mode
+                    "s" => {
+                        s.slow_mode = !s.slow_mode;
+                        let new_speed = if s.slow_mode {
+                            s.rot_speed_slow
+                        } else {
+                            s.rot_speed_fast
+                        };
+                        if s.rot_vel != 0.0 {
+                            let dir = if s.rot_vel > 0.0 { 1.0 } else { -1.0 };
+                            s.rot_vel = dir * new_speed;
+                        }
+                        log(if s.slow_mode {
+                            "切换为慢速模式"
+                        } else {
+                            "切换为快速模式"
+                        });
                     }
                     "f" => {
                         p.flip = Some(!p.flip.unwrap_or(false));
                         draw(&mut s);
+                    }
+                    // toggle restrict movement mode
+                    "l" => {
+                        s.restrict_mode = !s.restrict_mode;
+                        log(if s.restrict_mode {
+                            "限制模式：开启（禁止与他件/边框重叠）"
+                        } else {
+                            "限制模式：关闭"
+                        });
+                    }
+                    // track Shift press for temporary constraint
+                    "shift" => {
+                        s.shift_down = true;
                     }
                     _ => {}
                 }
@@ -886,6 +914,9 @@ fn attach_ui(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
             if key == "q" || key == "e" {
                 s.rot_vel = 0.0;
             }
+            if key == "shift" {
+                s.shift_down = false;
+            }
         }));
         state
             .borrow()
@@ -902,7 +933,7 @@ fn attach_ui(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
                 let mut s = st.borrow_mut();
                 if let Some(idx) = s.dragging_idx {
                     let base = if e.shift_key() { 0.03 } else { 0.1 }; // deg per deltaY unit
-                    let delta = (-e.delta_y() as f64) * base;
+                    let delta = (-e.delta_y()) * base;
                     let p = &mut s.data.pieces[idx];
                     p.rotation = Some(p.rotation.unwrap_or(0.0) + delta);
                     draw(&mut s);
@@ -921,175 +952,115 @@ fn attach_ui(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
 }
 
 fn export_png_blueprint(state: &State) -> Result<(), JsValue> {
-    // parameters (in mm and px)
-    let pad_mm = 5.0;
-    let grid_gap_mm = 8.0;
     let px_per_mm = 4.0; // export resolution
 
-    // Collect board geometry and bounds
-    let mut board_geom: Vec<Point> = Vec::new();
-    let mut board_bounds: Option<(f64, f64, f64, f64)> = None;
-    if let Some(b) = &state.data.board {
-        if let Some(g) = board_to_geom(b) {
-            let (minx, miny, maxx, maxy) = bounds_of(&g);
-            board_geom = g;
-            board_bounds = Some((minx, miny, maxx, maxy));
-        }
-    }
-
-    // Compute piece geometries and bounds
-    let mut piece_geoms: Vec<(Vec<Point>, (f64, f64, f64, f64))> = Vec::new();
-    for p in &state.data.pieces {
-        let (g, _c) = piece_geom(p);
-        if !g.is_empty() {
-            piece_geoms.push((g.clone(), bounds_of(&g)));
-        }
-    }
-
-    // Layout: board on top, pieces in rows below, packed to a target row width
-    let board_w_mm = board_bounds.map(|b| b.2 - b.0).unwrap_or(120.0);
-    let target_row_w_mm = board_w_mm.max(120.0);
-
-    let mut rows: Vec<Vec<usize>> = Vec::new();
-    let mut cur_row: Vec<usize> = Vec::new();
-    let mut cur_w = 0.0;
-    for (i, (_g, (minx, _miny, maxx, _maxy))) in piece_geoms.iter().enumerate() {
-        let w = (maxx - minx) + grid_gap_mm;
-        if !cur_row.is_empty() && cur_w + w > target_row_w_mm {
-            rows.push(cur_row);
-            cur_row = Vec::new();
-            cur_w = 0.0;
-        }
-        cur_w += w;
-        cur_row.push(i);
-    }
-    if !cur_row.is_empty() {
-        rows.push(cur_row);
-    }
-
-    // Compute overall size in mm
-    let mut total_w_mm = target_row_w_mm + pad_mm * 2.0;
-    let board_h_mm = board_bounds.map(|b| b.3 - b.1).unwrap_or(100.0);
-    let mut total_h_mm = pad_mm + board_h_mm + pad_mm; // top pad + board + pad to rows
-    for row in &rows {
-        let mut row_h: f64 = 0.0;
-        for &idx in row {
-            let (_g, (_minx, miny, _maxx, maxy)) = &piece_geoms[idx];
-            row_h = row_h.max(maxy - miny);
-        }
-        total_h_mm += row_h + grid_gap_mm;
-    }
-    total_h_mm += pad_mm; // bottom pad
-
-    // Create offscreen canvas
-    let (w_px, h_px) = (
-        (total_w_mm * px_per_mm).ceil() as u32,
-        (total_h_mm * px_per_mm).ceil() as u32,
-    );
-    let document = state.document.clone();
-    let canvas: HtmlCanvasElement = document.create_element("canvas")?.dyn_into()?;
-    canvas.set_width(w_px);
-    canvas.set_height(h_px);
-    let ctx: CanvasRenderingContext2d = canvas.get_context("2d")?.unwrap().dyn_into()?;
-    ctx.set_fill_style(&JsValue::from_str("#ffffff"));
-    ctx.fill_rect(0.0, 0.0, w_px as f64, h_px as f64);
-    ctx.set_stroke_style(&JsValue::from_str("#333"));
-    ctx.set_line_width(1.5);
-    ctx.set_font("12px sans-serif");
-
-    // Transform helpers for this export
-    let canvas_h = h_px as f64;
-    let scale = px_per_mm;
-    let offset = (0.0, 0.0);
-
-    // Draw board centered horizontally at top
-    let mut cursor_y_mm = pad_mm;
-    if !board_geom.is_empty() {
-        let (minx, miny, maxx, maxy) = board_bounds.unwrap();
-        let bw = maxx - minx;
-        let bh = maxy - miny;
-        let left_mm = ((target_row_w_mm - bw) / 2.0).max(0.0) + pad_mm;
-        let geom = translate_geom(&board_geom, -minx + left_mm, -miny + cursor_y_mm);
-        draw_colored_polygon(&ctx, canvas_h, &geom, false, scale, offset, "#ffffff");
-        // Dimensions
-        draw_dimension_mm(
-            &ctx,
-            canvas_h,
-            scale,
-            offset,
-            (left_mm, cursor_y_mm + bh + 3.0),
-            (left_mm + bw, cursor_y_mm + bh + 3.0),
-            &format!("{:.0} mm", bw),
-        );
-        draw_dimension_mm(
-            &ctx,
-            canvas_h,
-            scale,
-            offset,
-            (left_mm - 3.0, cursor_y_mm),
-            (left_mm - 3.0, cursor_y_mm + bh),
-            &format!("{:.0} mm", bh),
-        );
-        cursor_y_mm += bh + pad_mm;
-    }
-
-    // Draw pieces row by row
-    let mut row_top = cursor_y_mm;
-    for row in rows {
-        let mut x_mm = pad_mm;
-        let mut row_h: f64 = 0.0;
-        for idx in row {
-            let (geom, (minx, miny, maxx, maxy)) = &piece_geoms[idx];
-            let w = maxx - minx;
-            let h = maxy - miny;
-            let g = translate_geom(geom, -minx + x_mm, -miny + row_top);
-            draw_colored_polygon(&ctx, canvas_h, &g, false, scale, offset, "#ffffff");
-            // bounding box dims
-            draw_dimension_mm(
-                &ctx,
-                canvas_h,
-                scale,
-                offset,
-                (x_mm, row_top + h + 2.5),
-                (x_mm + w, row_top + h + 2.5),
-                &format!("{:.0} mm", w),
-            );
-            draw_dimension_mm(
-                &ctx,
-                canvas_h,
-                scale,
-                offset,
-                (x_mm - 2.5, row_top),
-                (x_mm - 2.5, row_top + h),
-                &format!("{:.0} mm", h),
-            );
-            x_mm += w + grid_gap_mm;
-            row_h = row_h.max(h);
-        }
-        row_top += row_h + grid_gap_mm;
-    }
-
-    // Save as PNG
-    let cb = Closure::<dyn FnMut(Option<Blob>)>::new({
-        let document = document.clone();
-        move |opt_blob: Option<Blob>| {
-            if let Some(blob) = opt_blob {
-                if let Ok(url) = Url::create_object_url_with_blob(&blob) {
-                    if let Ok(a) = document.create_element("a") {
-                        if let Ok(ae) = a.dyn_into::<HtmlElement>() {
-                            let _ = ae.set_attribute("href", &url);
-                            let _ = ae.set_attribute("download", "puzzle_blueprint.png");
-                            ae.click();
-                            let _ = Url::revoke_object_url(&url);
-                        }
-                    }
-                }
-            }
-        }
+    // Build a PuzzleSpec (pieces-only), ignoring current poses to match CLI blueprint semantics
+    let board = state.data.board.clone().map(|b| blueprint_core::Board {
+        type_: b.type_,
+        w: b.w,
+        h: b.h,
+        r: b.r,
+        cut_corner: b.cut_corner,
+        points: b.points,
+        label: None,
+        label_lines: None,
     });
-    canvas.to_blob(cb.as_ref().unchecked_ref());
-    cb.forget();
+    let pieces = state
+        .data
+        .pieces
+        .iter()
+        .map(|p| blueprint_core::Piece {
+            id: p.id.clone(),
+            type_: p.type_.clone(),
+            at: Some([0.0, 0.0]),
+            rotation: Some(0.0),
+            anchor: Some("bottomleft".to_string()),
+            flip: Some(false),
+            w: p.w,
+            h: p.h,
+            side: p.side,
+            a: p.a,
+            b: p.b,
+            n: p.n,
+            d: p.d,
+            r: p.r,
+            base_bottom: p.base_bottom,
+            base_top: p.base_top,
+            height: p.height,
+            base: p.base,
+            offset_top: p.offset_top,
+            points: p.points.clone(),
+        })
+        .collect::<Vec<_>>();
+    let spec = blueprint_core::PuzzleSpec {
+        units: state.data.units.clone(),
+        board,
+        pieces: Some(pieces),
+        parts: None,
+        counts: None,
+        shapes_file: None,
+    };
+
+    let (svg, w_px, h_px) = blueprint_core::build_blueprint_svg(&spec, px_per_mm, None);
+
+    // Render SVG to RGBA using embedded font
+    let mut opt = usvg::Options::default();
+    let mut fontdb = usvg::fontdb::Database::new();
+    fontdb.load_font_data(fonts::FONT_BYTES.to_vec());
+    let family_name = {
+        let mut it = fontdb.faces();
+        if let Some(face) = it.next() {
+            face.families.first().map(|(n, _)| n.clone())
+        } else {
+            None
+        }
+    };
+    if let Some(name) = family_name {
+        fontdb.set_sans_serif_family(name);
+    }
+    opt.fontdb = std::sync::Arc::new(fontdb);
+    let tree = usvg::Tree::from_str(&svg, &opt)
+        .map_err(|e| JsValue::from_str(&format!("SVG parse error: {e:?}")))?;
+    let mut pixmap =
+        tiny_skia::Pixmap::new(w_px, h_px).ok_or(JsValue::from_str("pixmap alloc failed"))?;
+    let mut pm = pixmap.as_mut();
+    resvg::render(&tree, tiny_skia::Transform::identity(), &mut pm);
+
+    // Deterministic PNG encoding into memory
+    let bytes = encode_png_deterministic_to_vec(&pixmap)
+        .map_err(|e| JsValue::from_str(&format!("encode: {e}")))?;
+
+    // Create Blob and trigger download
+    let document = state.document.clone();
+    let array = js_sys::Array::new();
+    let u8 = js_sys::Uint8Array::from(bytes.as_slice());
+    array.push(&u8);
+    let blob = Blob::new_with_u8_array_sequence(&array)?;
+    let url = Url::create_object_url_with_blob(&blob)?;
+    let a = document.create_element("a")?.dyn_into::<HtmlElement>()?;
+    a.set_attribute("href", &url)?;
+    a.set_attribute("download", "puzzle_blueprint.png")?;
+    a.click();
+    Url::revoke_object_url(&url)?;
     Ok(())
+}
+
+fn encode_png_deterministic_to_vec(
+    pixmap: &tiny_skia::Pixmap,
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    let mut buf = Vec::new();
+    let w = pixmap.width();
+    let h = pixmap.height();
+    let mut enc = Encoder::new(&mut buf, w, h);
+    enc.set_color(ColorType::Rgba);
+    enc.set_depth(BitDepth::Eight);
+    enc.set_filter(FilterType::NoFilter);
+    enc.set_compression(Compression::Default);
+    {
+        let mut writer = enc.write_header()?;
+        writer.write_image_data(pixmap.data())?;
+    }
+    Ok(buf)
 }
 
 fn translate_geom(pts: &[Point], dx: f64, dy: f64) -> Vec<Point> {
@@ -1142,12 +1113,14 @@ fn draw_dimension_mm(
         scale,
         offset,
     );
+    #[allow(deprecated)]
     ctx.set_stroke_style(&JsValue::from_str("#999"));
+    #[allow(deprecated)]
     ctx.set_fill_style(&JsValue::from_str("#333"));
-    let _ = ctx.begin_path();
-    let _ = ctx.move_to(ax, ay);
-    let _ = ctx.line_to(bx, by);
-    let _ = ctx.stroke();
+    ctx.begin_path();
+    ctx.move_to(ax, ay);
+    ctx.line_to(bx, by);
+    ctx.stroke();
     // Arrow heads
     draw_arrow_head(ctx, ax, ay, bx, by);
     draw_arrow_head(ctx, bx, by, ax, ay);
@@ -1155,6 +1128,7 @@ fn draw_dimension_mm(
     let mx = (ax + bx) / 2.0;
     let my = (ay + by) / 2.0;
     let _ = ctx.fill_text(label, mx + 4.0, my - 4.0);
+    #[allow(deprecated)]
     ctx.set_stroke_style(&JsValue::from_str("#333"));
 }
 
@@ -1165,12 +1139,12 @@ fn draw_arrow_head(ctx: &CanvasRenderingContext2d, x0: f64, y0: f64, x1: f64, y1
     let a2 = ang + std::f64::consts::PI + 0.6;
     let p1 = (x1 + len * a1.cos(), y1 + len * a1.sin());
     let p2 = (x1 + len * a2.cos(), y1 + len * a2.sin());
-    let _ = ctx.begin_path();
-    let _ = ctx.move_to(x1, y1);
-    let _ = ctx.line_to(p1.0, p1.1);
-    let _ = ctx.move_to(x1, y1);
-    let _ = ctx.line_to(p2.0, p2.1);
-    let _ = ctx.stroke();
+    ctx.begin_path();
+    ctx.move_to(x1, y1);
+    ctx.line_to(p1.0, p1.1);
+    ctx.move_to(x1, y1);
+    ctx.line_to(p2.0, p2.1);
+    ctx.stroke();
 }
 
 fn init_canvas(
@@ -1188,7 +1162,8 @@ fn init_canvas(
 }
 
 fn start_animation(state: Rc<RefCell<State>>) {
-    let f: Rc<RefCell<Option<Closure<dyn FnMut(f64)>>>> = Rc::new(RefCell::new(None));
+    type RafClosure = Closure<dyn FnMut(f64)>;
+    let f: Rc<RefCell<Option<RafClosure>>> = Rc::new(RefCell::new(None));
     let g = f.clone();
     *g.borrow_mut() = Some(Closure::wrap(Box::new(move |_ts: f64| {
         {
@@ -1240,22 +1215,24 @@ fn build_puzzle_from_counts(spec: &CountsSpec, catalog: &ShapesCatalog) -> Puzzl
     for (id, ct) in &spec.counts {
         if let Some(sd) = by_id.get(id.as_str()) {
             for _ in 0..*ct {
-                let mut p = Piece::default();
-                p.type_ = sd.type_.clone();
-                p.w = sd.w;
-                p.h = sd.h;
-                p.side = sd.side;
-                p.a = sd.a;
-                p.b = sd.b;
-                p.n = sd.n;
-                p.d = sd.d;
-                p.r = sd.r;
-                p.base_bottom = sd.base_bottom;
-                p.base_top = sd.base_top;
-                p.height = sd.height;
-                p.base = sd.base;
-                p.offset_top = sd.offset_top;
-                p.points = sd.points.clone();
+                let p = Piece {
+                    type_: sd.type_.clone(),
+                    w: sd.w,
+                    h: sd.h,
+                    side: sd.side,
+                    a: sd.a,
+                    b: sd.b,
+                    n: sd.n,
+                    d: sd.d,
+                    r: sd.r,
+                    base_bottom: sd.base_bottom,
+                    base_top: sd.base_top,
+                    height: sd.height,
+                    base: sd.base,
+                    offset_top: sd.offset_top,
+                    points: sd.points.clone(),
+                    ..Default::default()
+                };
                 // For initial layout: arrange in rows inside board or in a grid starting at (10,10)
                 pieces.push(p);
             }
@@ -1265,7 +1242,7 @@ fn build_puzzle_from_counts(spec: &CountsSpec, catalog: &ShapesCatalog) -> Puzzl
     // Simple initial placement: grid with 10mm margin and 5mm gap
     let margin = 10.0;
     let gap = 5.0;
-    let (bw, bh) = spec
+    let (bw, _bh) = spec
         .board
         .as_ref()
         .map(|b| (b.w.unwrap_or(200.0), b.h.unwrap_or(200.0)))
@@ -1329,21 +1306,21 @@ pub fn start() -> Result<(), JsValue> {
     let document = window.document().ok_or("no document")?;
     let (canvas, ctx) = init_canvas(&document)?;
 
-    let mut data = default_puzzle();
+    let data = default_puzzle();
     // If URL param p is set, we try to fetch puzzles/<p>.json; otherwise use default
-    if let Some(search) = window.location().search().ok() {
-        if let Some(p) = get_query_param(&search, "p") {
-            // Try to fetch; fire-and-forget; fallback to default already loaded
-            let win = window.clone();
-            let doc = document.clone();
-            let cv = canvas.clone();
-            let ctx2 = ctx.clone();
-            wasm_bindgen_futures::spawn_local(async move {
-                if let Err(err) = fetch_and_load_puzzle(win, doc, cv, ctx2, &p).await {
-                    log(&format!("Failed to load puzzle '{}': {:?}", p, err));
-                }
-            });
-        }
+    if let Ok(search) = window.location().search()
+        && let Some(p) = get_query_param(&search, "p")
+    {
+        // Try to fetch; fire-and-forget; fallback to default already loaded
+        let win = window.clone();
+        let doc = document.clone();
+        let cv = canvas.clone();
+        let ctx2 = ctx.clone();
+        wasm_bindgen_futures::spawn_local(async move {
+            if let Err(err) = fetch_and_load_puzzle(win, doc, cv, ctx2, &p).await {
+                log(&format!("Failed to load puzzle '{}': {:?}", p, err));
+            }
+        });
     }
 
     let state = Rc::new(RefCell::new(State {
@@ -1357,6 +1334,11 @@ pub fn start() -> Result<(), JsValue> {
         scale: DEFAULT_MM2PX,
         offset: (0.0, 0.0),
         rot_vel: 0.0,
+        slow_mode: false,
+        rot_speed_fast: 180.0,
+        rot_speed_slow: 30.0,
+        restrict_mode: false,
+        shift_down: false,
     }));
 
     STATE.with(|st| st.replace(Some(state.clone())));
@@ -1443,16 +1425,14 @@ fn update_viewport(state: &mut State) {
     let mut maxx = f64::NEG_INFINITY;
     let mut maxy = f64::NEG_INFINITY;
 
-    let mut have_bounds = false;
-    if let Some(b) = &state.data.board {
-        if let Some(geom) = board_to_geom(b) {
-            for p in geom {
-                minx = minx.min(p.x);
-                maxx = maxx.max(p.x);
-                miny = miny.min(p.y);
-                maxy = maxy.max(p.y);
-            }
-            have_bounds = true;
+    if let Some(b) = &state.data.board
+        && let Some(geom) = board_to_geom(b)
+    {
+        for p in geom {
+            minx = minx.min(p.x);
+            maxx = maxx.max(p.x);
+            miny = miny.min(p.y);
+            maxy = maxy.max(p.y);
         }
     }
     // Always include pieces in the bounds so off-board pieces remain visible
@@ -1465,7 +1445,7 @@ fn update_viewport(state: &mut State) {
             maxy = maxy.max(q.y);
         }
     }
-    have_bounds = maxx.is_finite() && maxy.is_finite();
+    let have_bounds = maxx.is_finite() && maxy.is_finite();
 
     let (w_mm, h_mm) = if have_bounds {
         ((maxx - minx).max(1.0), (maxy - miny).max(1.0))

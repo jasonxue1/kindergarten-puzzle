@@ -33,8 +33,16 @@
             pkgs.python3
             pkgs.watchexec
             pkgs.nushell
+            pkgs.alejandra
+            pkgs.deadnix
+            pkgs.nixd
             pkgs.clang
             pkgs.pkg-config
+            pkgs.taplo
+            pkgs.prettierd
+            pkgs.prettier
+            pkgs.shfmt
+            # add mado and mdsf
           ];
           shellHook = ''
             export CC=clang
