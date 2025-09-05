@@ -1144,28 +1144,7 @@ fn attach_ui(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
         keyup.forget();
     }
 
-    // Mouse wheel for linear rotation while dragging
-    {
-        let st = state.clone();
-        let wheel = Closure::<dyn FnMut(web_sys::WheelEvent)>::wrap(Box::new(
-            move |e: web_sys::WheelEvent| {
-                let mut s = st.borrow_mut();
-                if let Some(idx) = s.dragging_idx {
-                    let base = if e.shift_key() { 0.03 } else { 0.1 }; // deg per deltaY unit
-                    let delta = (-e.delta_y()) * base;
-                    let p = &mut s.data.pieces[idx];
-                    p.rotation = Some(p.rotation.unwrap_or(0.0) + delta);
-                    draw(&mut s);
-                    e.prevent_default();
-                }
-            },
-        ));
-        state
-            .borrow()
-            .canvas
-            .add_event_listener_with_callback("wheel", wheel.as_ref().unchecked_ref())?;
-        wheel.forget();
-    }
+    // Mouse wheel rotation removed by request
 
     Ok(())
 }
