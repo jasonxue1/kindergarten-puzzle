@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { strings, type Lang } from "./i18n";
+import { ThemeToggle } from "./theme";
 
 // WASM bootstrapping: we will dynamically import the wasm-pack JS from /public
 // so Vite doesn't try to process it. See useEffect below.
@@ -100,54 +101,57 @@ const App: React.FC = () => {
             <option value="en">English</option>
             <option value="zh">中文</option>
           </select>
+          <span aria-hidden style={{ flex: 1 }} />
+          <label style={{ marginRight: 4 }}>{t.theme}</label>
+          <ThemeToggle
+            labels={{
+              light: strings[lang].themeLight,
+              dark: strings[lang].themeDark,
+              auto: strings[lang].themeAuto,
+            }}
+          />
           <span id="help">{t.help}</span>
         </div>
         <div id="status" className="status">
           &nbsp;
         </div>
-        <canvas
-          id="cv"
-          width={1200}
-          height={800}
-          style={{ background: "#fff" }}
-        />
-        <div id="note" style={{ padding: "8px 12px", color: "#333" }} />
+        <canvas id="cv" width={1200} height={800} />
+        <div id="note" style={{ padding: "8px 12px" }} />
       </div>
       {showChooser && (
         <div
+          className="scrim"
           style={{
             position: "fixed",
             inset: 0,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            background: "rgba(0,0,0,0.35)",
             zIndex: 20,
           }}
         >
           <div className="card" style={{ width: 520, padding: "20px 24px" }}>
             <h2 style={{ margin: "0 0 12px 0" }}>Select a Puzzle</h2>
-            <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+            <ul className="chooser">
               {puzzles.map((item) => (
-                <li
-                  key={item.id}
-                  style={{ padding: "8px 0", borderBottom: "1px solid #eee" }}
-                >
+                <li key={item.id}>
                   <a
                     href={`?p=${encodeURIComponent(item.id)}`}
-                    style={{ color: "#0a66c2", textDecoration: "none" }}
+                    style={{ textDecoration: "none" }}
                   >
                     {item.title || item.id}
                   </a>
                   {item.desc && (
-                    <span style={{ color: "#666", marginLeft: 6 }}>
+                    <span
+                      style={{ color: "inherit", opacity: 0.8, marginLeft: 6 }}
+                    >
                       {" "}
                       — {item.desc}
                     </span>
                   )}
                 </li>
               ))}
-              <li style={{ padding: "8px 0", borderBottom: "1px solid #eee" }}>
+              <li>
                 <a
                   href="#"
                   onClick={(e) => {
@@ -157,25 +161,22 @@ const App: React.FC = () => {
                     ) as HTMLInputElement | null;
                     input?.click();
                   }}
-                  style={{ color: "#0a66c2", textDecoration: "none" }}
+                  style={{ textDecoration: "none" }}
                 >
                   Load local JSON…
                 </a>
               </li>
-              <li style={{ padding: "8px 0", borderBottom: "1px solid #eee" }}>
+              <li>
                 <a
                   href="puzzle/"
                   target="_blank"
-                  style={{ color: "#0a66c2", textDecoration: "none" }}
+                  style={{ textDecoration: "none" }}
                 >
                   Browse puzzle directory
                 </a>
               </li>
-              <li style={{ padding: "8px 0" }}>
-                <a
-                  href="./"
-                  style={{ color: "#0a66c2", textDecoration: "none" }}
-                >
+              <li>
+                <a href="./" style={{ textDecoration: "none" }}>
                   Back to site root
                 </a>
               </li>

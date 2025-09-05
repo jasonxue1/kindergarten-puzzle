@@ -7,6 +7,9 @@ settings:
 importers:
   .:
     dependencies:
+      "@catppuccin/palette":
+        specifier: "*"
+        version: 1.7.1
       i18next:
         specifier: ^23.11.5
         version: 23.16.8
@@ -40,6 +43,12 @@ packages:
         integrity: sha512-9uIQ10o0WGdpP6GDhXcdOJPJuDgFtIDtN/9+ArJQ2NAfAmiuhTQdzkaTGR33v43GYS2UrSA0eX2pPPHoFVvpxA==,
       }
     engines: { node: ">=6.9.0" }
+
+  "@catppuccin/palette@1.7.1":
+    resolution:
+      {
+        integrity: sha512-aRc1tbzrevOTV7nFTT9SRdF26w/MIwT4Jwt4fDMc9itRZUDXCuEDBLyz4TQMlqO9ZP8mf5Hu4Jr6D03NLFc6Gw==,
+      }
 
   "@esbuild/aix-ppc64@0.21.5":
     resolution:
@@ -616,6 +625,8 @@ packages:
 
 snapshots:
   "@babel/runtime@7.28.3": {}
+
+  "@catppuccin/palette@1.7.1": {}
 
   "@esbuild/aix-ppc64@0.21.5":
     optional: true

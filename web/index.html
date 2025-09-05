@@ -5,13 +5,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Kindergarten Puzzle (Modern UI)</title>
     <style>
+      html,
+      body {
+        height: 100%;
+      }
       body {
         margin: 0;
         font-family:
+          ui-sans-serif,
           system-ui,
+          -apple-system,
           Segoe UI,
+          Roboto,
           Arial;
-        background: #f5f7fb;
+        visibility: hidden; /* Prevent FOUC until palette is injected */
+        color: var(--ctp-latte-text);
+        background: var(--ctp-latte-base);
+      }
+      html[data-theme="dark"] body {
+        color: var(--ctp-mocha-text);
+        background: var(--ctp-mocha-crust);
       }
       #app {
         display: contents;
@@ -22,36 +35,176 @@
         padding: 0 16px;
       }
       .card {
-        background: #fff;
+        background: var(--ctp-latte-base);
         border-radius: 12px;
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+        box-shadow: 0 8px 24px
+          color-mix(in oklab, var(--ctp-latte-crust), transparent 90%);
         overflow: hidden;
+        border: 1px solid var(--ctp-latte-surface0);
+      }
+      html[data-theme="dark"] .card {
+        background: var(--ctp-mocha-base);
+        box-shadow: 0 8px 24px
+          color-mix(in oklab, var(--ctp-mocha-crust), transparent 75%);
+        border-color: var(--ctp-mocha-surface0);
       }
       .toolbar {
         display: flex;
         gap: 8px;
         align-items: center;
         padding: 10px 12px;
-        border-bottom: 1px solid #e8e8e8;
+        border-bottom: 1px solid var(--ctp-latte-surface0);
+      }
+      html[data-theme="dark"] .toolbar {
+        border-bottom-color: var(--ctp-mocha-surface0);
       }
       .status {
         padding: 6px 12px;
-        color: #444;
+        color: var(--ctp-latte-subtext0);
         font-size: 14px;
-        border-bottom: 1px solid #eee;
-        background: #fafafa;
+        border-bottom: 1px solid var(--ctp-latte-surface0);
+        background: var(--ctp-latte-mantle);
+      }
+      html[data-theme="dark"] .status {
+        color: var(--ctp-mocha-subtext0);
+        border-bottom-color: var(--ctp-mocha-surface0);
+        background: var(--ctp-mocha-mantle);
       }
       canvas {
         display: block;
         width: 100%;
         height: auto;
+        background: var(--ctp-latte-base);
+      }
+      html[data-theme="dark"] canvas {
+        background: var(--ctp-mocha-base);
       }
       button,
       select,
       input {
         font: inherit;
+        color: inherit;
+      }
+      button,
+      select,
+      input[type="file"] {
+        background: transparent;
+        border: 1px solid var(--ctp-latte-surface0);
+        color: inherit;
+        padding: 6px 10px;
+        border-radius: 8px;
+      }
+      html[data-theme="dark"] button,
+      html[data-theme="dark"] select,
+      html[data-theme="dark"] input[type="file"] {
+        border-color: var(--ctp-mocha-surface0);
+      }
+      button:hover {
+        background: color-mix(
+          in oklab,
+          var(--ctp-latte-mantle),
+          transparent 30%
+        );
+      }
+      html[data-theme="dark"] button:hover {
+        background: color-mix(
+          in oklab,
+          var(--ctp-mocha-mantle),
+          transparent 30%
+        );
+      }
+      button:focus-visible,
+      select:focus-visible {
+        outline: 2px solid var(--ctp-latte-lavender);
+        outline-offset: 2px;
+      }
+      html[data-theme="dark"] button:focus-visible,
+      html[data-theme="dark"] select:focus-visible {
+        outline-color: var(--ctp-mocha-lavender);
+      }
+      a {
+        color: var(--ctp-latte-blue);
+        text-decoration: none;
+      }
+      html[data-theme="dark"] a {
+        color: var(--ctp-mocha-blue);
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+
+      .theme-toggle {
+        display: inline-flex;
+        border: 1px solid var(--ctp-latte-surface0);
+        border-radius: 10px;
+        overflow: hidden;
+      }
+      html[data-theme="dark"] .theme-toggle {
+        border-color: var(--ctp-mocha-surface0);
+      }
+      .theme-toggle button {
+        border: 0;
+        padding: 6px 8px;
+        display: grid;
+        place-items: center;
+        background: transparent;
+      }
+      .theme-toggle button[aria-pressed="true"] {
+        background: var(--ctp-latte-mantle);
+      }
+      html[data-theme="dark"] .theme-toggle button[aria-pressed="true"] {
+        background: var(--ctp-mocha-mantle);
+      }
+      .theme-toggle svg {
+        width: 18px;
+        height: 18px;
+        fill: currentColor;
+      }
+
+      .scrim {
+        background: color-mix(
+          in oklab,
+          var(--ctp-latte-crust),
+          transparent 65%
+        );
+      }
+      html[data-theme="dark"] .scrim {
+        background: color-mix(
+          in oklab,
+          var(--ctp-mocha-crust),
+          transparent 45%
+        );
+      }
+
+      .chooser {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
+      .chooser li {
+        padding: 8px 0;
+        border-bottom: 1px solid var(--ctp-latte-surface0);
+      }
+      html[data-theme="dark"] .chooser li {
+        border-bottom-color: var(--ctp-mocha-surface0);
       }
     </style>
+    <script>
+      try {
+        const pref = localStorage.getItem("theme") || "auto";
+        const mq =
+          window.matchMedia &&
+          window.matchMedia("(prefers-color-scheme: dark)");
+        const sysDark = mq ? mq.matches : false;
+        const dark = pref === "dark" || (pref === "auto" && sysDark);
+        document.documentElement.setAttribute(
+          "data-theme",
+          dark ? "dark" : "light",
+        );
+      } catch (e) {
+        /* no-op */
+      }
+    </script>
   </head>
   <body>
     <div id="app"></div>
