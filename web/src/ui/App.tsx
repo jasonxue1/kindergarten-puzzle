@@ -92,87 +92,99 @@ const App: React.FC = () => {
   return (
     <div className="container">
       <div className="card">
-        <div id="bar" className="toolbar">
-          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-            <button
-              id="homeBtn"
-              className="icon-btn"
-              style={{ display: hasParamP ? "inline-grid" : "none" }}
-              title={t.home}
-              onClick={() => (window.location.href = "./")}
-            >
-              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
-                <path d="M12 3l9 8h-3v9h-12v-9h-3l9-8z" />
-              </svg>
-              <span className="sr-only">{t.home}</span>
-            </button>
-            <button id="resetPuzzle" className="icon-btn" title={t.reset}>
-              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
-                <path d="M12 6V3L8 7l4 4V8c2.76 0 5 2.24 5 5a5 5 0 11-9.9-1h-2.02a7 7 0 1012.92 3c0-3.87-3.13-7-7-7z" />
-              </svg>
-              <span className="sr-only">{t.reset}</span>
-            </button>
-            <button id="exportPng" className="icon-btn" title={t.download}>
-              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
-                <path d="M5 20h14v-2H5v2zm7-18l-5.5 5.5h3.5V15h4V7.5H17.5L12 2z" />
-              </svg>
-              <span className="sr-only">{t.download}</span>
-            </button>
-            <input
-              type="file"
-              id="file"
-              accept=".json"
-              style={{ display: "none" }}
-            />
-            <button
-              className="icon-btn"
-              title={lang === "zh" ? "打开本地JSON" : "Open local JSON"}
-              onClick={() =>
-                (
-                  document.getElementById("file") as HTMLInputElement | null
-                )?.click()
-              }
-            >
-              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
-                <path d="M19 13H5v-2h14v2zm-7-9l-5 5h3v6h4V9h3l-5-5z" />
-              </svg>
-              <span className="sr-only">Open</span>
-            </button>
-            <button
-              id="tutorBtn"
-              className="icon-btn"
-              title={t.tutor}
-              onClick={(e) => {
-                e.preventDefault();
-                setShowTutorial(true);
-              }}
-            >
-              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
-                <path d="M4 6h16v2H4V6zm0 4h10v2H4v-2zm0 4h16v2H4v-2z" />
-              </svg>
-              <span className="sr-only">{t.tutor}</span>
-            </button>
+        <div id="bar">
+          {/* First row: controls except speed */}
+          <div
+            className="toolbar"
+            style={{ display: "flex", gap: 8, alignItems: "center" }}
+          >
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <button
+                id="homeBtn"
+                className="icon-btn"
+                style={{ display: hasParamP ? "inline-flex" : "none" }}
+                title={t.home}
+                onClick={() => (window.location.href = "./")}
+              >
+                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
+                  <path d="M12 3l9 8h-3v9h-12v-9h-3l9-8z" />
+                </svg>
+                <span>{t.home}</span>
+              </button>
+              <button id="resetPuzzle" className="icon-btn" title={t.reset}>
+                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
+                  <path d="M12 6V3L8 7l4 4V8c2.76 0 5 2.24 5 5a5 5 0 11-9.9-1h-2.02a7 7 0 1012.92 3c0-3.87-3.13-7-7-7z" />
+                </svg>
+                <span>{t.reset}</span>
+              </button>
+              <button id="exportPng" className="icon-btn" title={t.download}>
+                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
+                  <path d="M5 20h14v-2H5v2zm7-18l-5.5 5.5h3.5V15h4V7.5H17.5L12 2z" />
+                </svg>
+                <span>{t.download}</span>
+              </button>
+              <input
+                type="file"
+                id="file"
+                accept=".json"
+                style={{ display: "none" }}
+              />
+              <button
+                className="icon-btn"
+                title={lang === "zh" ? "打开本地JSON" : "Open local JSON"}
+                onClick={() =>
+                  (
+                    document.getElementById("file") as HTMLInputElement | null
+                  )?.click()
+                }
+              >
+                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
+                  <path d="M19 13H5v-2h14v2zm-7-9l-5 5h3v6h4V9h3l-5-5z" />
+                </svg>
+                <span>{lang === "zh" ? "打开本地JSON" : "Open JSON"}</span>
+              </button>
+              <button
+                id="tutorBtn"
+                className="icon-btn"
+                title={t.tutor}
+                onClick={(e) => {
+                  e.preventDefault();
+                  setShowTutorial(true);
+                }}
+              >
+                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
+                  <path d="M4 6h16v2H4V6zm0 4h10v2H4v-2zm0 4h16v2H4v-2z" />
+                </svg>
+                <span>{t.tutor}</span>
+              </button>
+            </div>
+            <span className="spacer" aria-hidden style={{ flex: 1 }} />
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <label htmlFor="langSel">{t.language}</label>
+              <select
+                id="langSel"
+                value={lang}
+                onChange={(e) => setLang(e.target.value as Lang)}
+              >
+                <option value="en">English</option>
+                <option value="zh">中文</option>
+              </select>
+              <label style={{ marginLeft: 6 }}>{t.theme}</label>
+              <ThemeToggle
+                labels={{
+                  light: strings[lang].themeLight,
+                  dark: strings[lang].themeDark,
+                  auto: strings[lang].themeAuto,
+                }}
+              />
+            </div>
           </div>
-          <span className="spacer" aria-hidden style={{ flex: 1 }} />
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <label htmlFor="langSel">{t.language}</label>
-            <select
-              id="langSel"
-              value={lang}
-              onChange={(e) => setLang(e.target.value as Lang)}
-            >
-              <option value="en">English</option>
-              <option value="zh">中文</option>
-            </select>
-            <label style={{ marginLeft: 6 }}>{t.theme}</label>
-            <ThemeToggle
-              labels={{
-                light: strings[lang].themeLight,
-                dark: strings[lang].themeDark,
-                auto: strings[lang].themeAuto,
-              }}
-            />
-            <div style={{ width: 10 }} aria-hidden />
+
+          {/* Second row: speed controls */}
+          <div
+            className="toolbar"
+            style={{ display: "flex", gap: 16, alignItems: "center" }}
+          >
             <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
               <label htmlFor="fastSpeedSlider">{t.speedFast}</label>
               <input
