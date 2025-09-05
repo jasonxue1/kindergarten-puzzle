@@ -38,6 +38,7 @@ features = [
   "EventTarget",
   "console",
   "HtmlInputElement",
+  "HtmlSelectElement",
   "File",
   "FileList",
   "FileReader",

@@ -86,6 +86,9 @@ struct Puzzle {
     units: Option<String>,
     board: Option<Board>,
     pieces: Vec<Piece>,
+    // Optional per-puzzle notes in two languages
+    note_en: Option<String>,
+    note_zh: Option<String>,
 }
 
 // Counts + shapes catalog for building a default puzzle without per-piece positions
@@ -142,6 +145,8 @@ struct CountsSpec {
     board: Option<Board>,
     counts: std::collections::HashMap<String, u32>,
     shapes_file: Option<String>,
+    note_en: Option<String>,
+    note_zh: Option<String>,
 }
 
 struct State {
@@ -166,6 +171,8 @@ struct State {
     shift_down: bool,    // temporary constraint while Shift held
     // initial snapshot for reset
     initial_data: Puzzle,
+    // UI language: "en" or "zh"
+    lang: String,
 }
 
 thread_local! {
@@ -446,6 +453,23 @@ fn assign_piece_colors(p: &mut Puzzle) {
     }
 }
 
+fn update_note_dom(state: &State) {
+    let doc = &state.document;
+    if let Some(el) = doc.get_element_by_id("note") {
+        let el: HtmlElement = match el.dyn_into() { Ok(e) => e, Err(_) => return };
+        let mut txt = String::new();
+        let lang = state.lang.as_str();
+        if lang == "zh" {
+            if let Some(n) = &state.data.note_zh { txt = n.clone(); }
+            else if let Some(n) = &state.data.note_en { txt = n.clone(); }
+        } else {
+            if let Some(n) = &state.data.note_en { txt = n.clone(); }
+            else if let Some(n) = &state.data.note_zh { txt = n.clone(); }
+        }
+        el.set_inner_text(&txt);
+    }
+}
+
 fn draw_colored_polygon(
     ctx: &CanvasRenderingContext2d,
     canvas_h: f64,
@@ -689,6 +713,24 @@ fn attach_ui(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
         onclick.forget();
     }
 
+    // Language selector
+    if let Some(sel) = doc.get_element_by_id("langSel") {
+        let sel: HtmlElement = sel.dyn_into().unwrap();
+        let st = state.clone();
+        let onchange = Closure::<dyn FnMut()>::wrap(Box::new(move || {
+            let mut s = st.borrow_mut();
+            if let Some(input) = s.document.get_element_by_id("langSel")
+                && let Ok(sel) = input.dyn_into::<web_sys::HtmlSelectElement>()
+            {
+                let v = sel.value();
+                s.lang = if v.to_lowercase().starts_with("zh") { "zh".to_string() } else { "en".to_string() };
+                update_note_dom(&s);
+            }
+        }));
+        sel.set_onchange(Some(onchange.as_ref().unchecked_ref()));
+        onchange.forget();
+    }
+
     // Save JSON
     if let Some(btn) = doc.get_element_by_id("saveJson") {
         let btn: HtmlElement = btn.dyn_into().unwrap();
@@ -882,11 +924,7 @@ fn attach_ui(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
                             let dir = if s.rot_vel > 0.0 { 1.0 } else { -1.0 };
                             s.rot_vel = dir * new_speed;
                         }
-                        log(if s.slow_mode {
-                            "切换为慢速模式"
-                        } else {
-                            "切换为快速模式"
-                        });
+                        log(if s.slow_mode { "Switched to slow mode" } else { "Switched to fast mode" });
                     }
                     "f" => {
                         p.flip = Some(!p.flip.unwrap_or(false));
@@ -895,11 +933,7 @@ fn attach_ui(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
                     // toggle restrict movement mode
                     "l" => {
                         s.restrict_mode = !s.restrict_mode;
-                        log(if s.restrict_mode {
-                            "限制模式：开启（禁止与他件/边框重叠）"
-                        } else {
-                            "限制模式：关闭"
-                        });
+                        log(if s.restrict_mode { "Restriction: ON (no overlaps with pieces/border)" } else { "Restriction: OFF" });
                     }
                     // track Shift press for temporary constraint
                     "shift" => {
@@ -962,6 +996,8 @@ fn attach_ui(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
 
 fn export_png_blueprint(state: &State) -> Result<(), JsValue> {
     let px_per_mm = 4.0; // export resolution
+    // Set language for labels
+    blueprint_core::set_language(&state.lang);
 
     // Build a PuzzleSpec (pieces-only), ignoring current poses to match CLI blueprint semantics
     let board = state.data.board.clone().map(|b| blueprint_core::Board {
@@ -1126,6 +1162,8 @@ fn default_puzzle() -> Puzzle {
             units: Some("mm".to_string()),
             board: None,
             pieces: Vec::new(),
+            note_en: None,
+            note_zh: None,
         }
     }
 }
@@ -1207,6 +1245,8 @@ fn build_puzzle_from_counts(spec: &CountsSpec, catalog: &ShapesCatalog) -> Puzzl
         units: spec.units.clone().or(Some("mm".to_string())),
         board: spec.board.clone(),
         pieces,
+        note_en: spec.note_en.clone(),
+        note_zh: spec.note_zh.clone(),
     }
 }
 
@@ -1264,7 +1304,8 @@ pub fn start() -> Result<(), JsValue> {
         rot_speed_slow: 30.0,
         restrict_mode: false,
         shift_down: false,
-        initial_data: Puzzle { units: None, board: None, pieces: Vec::new() },
+        initial_data: Puzzle { units: None, board: None, pieces: Vec::new(), note_en: None, note_zh: None },
+        lang: "en".to_string(),
     }));
 
     STATE.with(|st| st.replace(Some(state.clone())));
@@ -1274,6 +1315,7 @@ pub fn start() -> Result<(), JsValue> {
             let mut s = st_rc.borrow_mut();
             assign_piece_colors(&mut s.data);
             s.initial_data = s.data.clone();
+            update_note_dom(&s);
         }
     });
     attach_ui(state.clone())?;
@@ -1320,6 +1362,7 @@ async fn fetch_and_load_puzzle(
             s.data = puzzle;
             assign_piece_colors(&mut s.data);
             s.initial_data = s.data.clone();
+            update_note_dom(&s);
             s.window = window.clone();
             s.document = document.clone();
             s.canvas = canvas.clone();

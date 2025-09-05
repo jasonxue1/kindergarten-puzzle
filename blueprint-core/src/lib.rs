@@ -7,6 +7,23 @@ thread_local! {
     static LABEL_MAP: RefCell<HashMap<String, String>> = RefCell::new(HashMap::new());
 }
 
+thread_local! {
+    static LANGUAGE: RefCell<String> = RefCell::new("en".to_string());
+}
+
+pub fn set_language(lang: &str) {
+    let l = if lang.eq_ignore_ascii_case("zh") || lang == "zh-CN" || lang == "zh_TW" {
+        "zh"
+    } else {
+        "en"
+    };
+    LANGUAGE.with(|s| s.replace(l.to_string()));
+}
+
+fn is_en() -> bool {
+    LANGUAGE.with(|s| s.borrow().as_str() == "en")
+}
+
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Point {
     pub x: f64,
@@ -102,6 +119,8 @@ pub struct ShapeDef {
     pub offset_top: Option<f64>,
     pub points: Option<Vec<[f64; 2]>>,
     pub label: Option<String>,
+    pub label_en: Option<String>,
+    pub label_zh: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -421,44 +440,82 @@ fn label_for_piece(p: &Piece) -> String {
     match p.type_.as_str() {
         "circle" => {
             let d = p.d.unwrap_or_else(|| p.r.unwrap_or(0.0) * 2.0);
-            format!("圆（直径 {}mm）", f(d))
+            if is_en() {
+                format!("Circle (diameter {} mm)", f(d))
+            } else {
+                format!("圆（直径 {}mm）", f(d))
+            }
         }
         "rect" => {
             let w = p.w.unwrap_or(0.0);
             let h = p.h.unwrap_or(0.0);
             if (w - h).abs() < 1e-6 {
-                format!("正方形（边长 {}mm）", f(w))
+                if is_en() {
+                    format!("Square (side {} mm)", f(w))
+                } else {
+                    format!("正方形（边长 {}mm）", f(w))
+                }
             } else {
-                format!("长方形（{}×{}mm）", f(w), f(h))
+                if is_en() {
+                    format!("Rectangle ({}×{} mm)", f(w), f(h))
+                } else {
+                    format!("长方形（{}×{}mm）", f(w), f(h))
+                }
             }
         }
         "regular_polygon" => {
             let n = p.n.unwrap_or(3);
             let side = p.side.unwrap_or(0.0);
             match n {
-                5 => format!("正五边形（边长 {}mm）", f(side)),
-                6 => format!("正六边形（边长 {}mm）", f(side)),
-                _ => format!("正{}边形（边长 {}mm）", n, f(side)),
+                5 => if is_en() { format!("Regular pentagon (side {} mm)", f(side)) } else { format!("正五边形（边长 {}mm）", f(side)) },
+                6 => if is_en() { format!("Regular hexagon (side {} mm)", f(side)) } else { format!("正六边形（边长 {}mm）", f(side)) },
+                _ => if is_en() { format!("Regular {}-gon (side {} mm)", n, f(side)) } else { format!("正{}边形（边长 {}mm）", n, f(side)) },
             }
         }
-        "equilateral_triangle" => format!("正三角形（边长 {}mm）", f(p.side.unwrap_or(0.0))),
-        "right_triangle" => format!(
-            "直角三角形（直角边 {}×{}mm）",
-            f(p.a.unwrap_or(0.0)),
-            f(p.b.unwrap_or(0.0))
-        ),
-        "isosceles_trapezoid" => format!(
-            "等腰梯形（下底 {}mm，上底 {}mm，高 {}mm）",
-            f(p.base_bottom.unwrap_or(0.0)),
-            f(p.base_top.unwrap_or(0.0)),
-            f(p.height.unwrap_or(0.0))
-        ),
-        "parallelogram" => format!(
-            "平行四边形（底 {}mm，顶边偏移 {}mm，高 {}mm）",
-            f(p.base.unwrap_or(0.0)),
-            f(p.offset_top.unwrap_or(0.0)),
-            f(p.height.unwrap_or(0.0))
-        ),
+        "equilateral_triangle" => if is_en() { format!("Equilateral triangle (side {} mm)", f(p.side.unwrap_or(0.0))) } else { format!("正三角形（边长 {}mm）", f(p.side.unwrap_or(0.0))) },
+        "right_triangle" => if is_en() {
+            format!(
+                "Right triangle (legs {}×{} mm)",
+                f(p.a.unwrap_or(0.0)),
+                f(p.b.unwrap_or(0.0))
+            )
+        } else {
+            format!(
+                "直角三角形（直角边 {}×{}mm）",
+                f(p.a.unwrap_or(0.0)),
+                f(p.b.unwrap_or(0.0))
+            )
+        },
+        "isosceles_trapezoid" => if is_en() {
+            format!(
+                "Isosceles trapezoid (bottom {} mm, top {} mm, height {} mm)",
+                f(p.base_bottom.unwrap_or(0.0)),
+                f(p.base_top.unwrap_or(0.0)),
+                f(p.height.unwrap_or(0.0))
+            )
+        } else {
+            format!(
+                "等腰梯形（下底 {}mm，上底 {}mm，高 {}mm）",
+                f(p.base_bottom.unwrap_or(0.0)),
+                f(p.base_top.unwrap_or(0.0)),
+                f(p.height.unwrap_or(0.0))
+            )
+        },
+        "parallelogram" => if is_en() {
+            format!(
+                "Parallelogram (base {} mm, top offset {} mm, height {} mm)",
+                f(p.base.unwrap_or(0.0)),
+                f(p.offset_top.unwrap_or(0.0)),
+                f(p.height.unwrap_or(0.0))
+            )
+        } else {
+            format!(
+                "平行四边形（底 {}mm，顶边偏移 {}mm，高 {}mm）",
+                f(p.base.unwrap_or(0.0)),
+                f(p.offset_top.unwrap_or(0.0)),
+                f(p.height.unwrap_or(0.0))
+            )
+        },
         _ => p.type_.clone(),
     }
 }
@@ -528,8 +585,14 @@ pub fn build_blueprint_svg(
         let mut label_map: HashMap<String, String> = HashMap::new();
         for s in &catalog.shapes {
             by_id.insert(s.id.clone(), s);
-            if let Some(lbl) = &s.label {
-                label_map.insert(s.id.clone(), lbl.clone());
+            // Prefer language-specific labels; for English, ignore generic 'label' to allow fallback
+            let chosen = if is_en() {
+                s.label_en.clone()
+            } else {
+                s.label_zh.clone().or_else(|| s.label.clone())
+            };
+            if let Some(lbl) = chosen {
+                label_map.insert(s.id.clone(), lbl);
             }
         }
         for (id, cnt) in counts.iter() {
@@ -669,9 +732,17 @@ pub fn build_blueprint_svg(
                 if let Some(lbl) = &b.label {
                     lines.push(lbl.clone());
                 } else if rtxt > 0.0 {
-                    lines.push(format!("外框 {}×{}mm（R{}）", wtxt, htxt, fmt_mm(rtxt)));
+                    if is_en() {
+                        lines.push(format!("Board {}×{} mm (R{})", wtxt, htxt, fmt_mm(rtxt)));
+                    } else {
+                        lines.push(format!("外框 {}×{}mm（R{}）", wtxt, htxt, fmt_mm(rtxt)));
+                    }
                 } else {
-                    lines.push(format!("外框 {}×{}mm", wtxt, htxt));
+                    if is_en() {
+                        lines.push(format!("Board {}×{} mm", wtxt, htxt));
+                    } else {
+                        lines.push(format!("外框 {}×{}mm", wtxt, htxt));
+                    }
                 }
             }
             let base_y_px = mm2px(total_h_mm - (cursor_y_mm + h / 2.0));

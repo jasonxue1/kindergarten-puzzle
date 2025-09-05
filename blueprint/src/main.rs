@@ -24,9 +24,9 @@ struct Board {
     r: Option<f64>,
     cut_corner: Option<String>,
     points: Option<Vec<[f64; 2]>>,
-    // 自定义外框文案（左列展示）；若为空则回退为“外框 W×Hmm（R?）”
+    // Optional board label (left column). If empty, falls back to auto label "Board W×H mm (R?)"
     label: Option<String>,
-    // 可选多行文案（优先于 label），便于不规则外框提供完整说明
+    // Optional multi-line label (preferred over label) for irregular boards
     label_lines: Option<Vec<String>>,
 }
 
@@ -116,7 +116,7 @@ struct ShapeDef {
     base: Option<f64>,
     offset_top: Option<f64>,
     points: Option<Vec<[f64; 2]>>,
-    // 形状的文案（左列展示），用于 counts+catalog 情况
+    // Human-readable label for shape (left column) when using counts+catalog
     label: Option<String>,
 }
 
@@ -479,7 +479,7 @@ fn build_blueprint_svg(
     px_per_mm: f64,
     shapes_path: Option<&str>,
 ) -> (String, u32, u32) {
-    // 清空并准备标签缓存
+    // Clear and prepare label cache
     LABEL_MAP.with(|m| m.borrow_mut().clear());
     // Gather board and pieces
     let mut board_geom: Vec<Point> = Vec::new();
@@ -675,7 +675,7 @@ fn build_blueprint_svg(
     // Top horizontal line
     draw_hline(&mut s, pad_mm);
 
-    // Draw board（作为表格第一行：左文字、右图形；不再绘制尺寸引线，只保留关键信息的文字）
+    // Draw board (first row of table: left text, right graphic)
     let mut cursor_y_mm = pad_mm;
     if !board_geom.is_empty() {
         let (minx, miny, maxx, maxy) = board_bounds.unwrap();
@@ -688,7 +688,7 @@ fn build_blueprint_svg(
         let left_mm = gfx_left_mm + ((gfx_w_mm - bw) / 2.0).max(0.0);
         let geom = translate_geom(&board_geom, -minx + left_mm, -miny + cursor_y_mm);
         s.push_str(&path_from_points(&geom, &to_px));
-        // label 外框（含尺寸）放在左侧标签栏内（仅关键信息，精确值）
+        // Board label (with dimensions) in left label column
         if let Some(b) = &p.board {
             let wtxt = fmt_mm(bw);
             let htxt = fmt_mm(bh);
@@ -705,13 +705,13 @@ fn build_blueprint_svg(
                 if let Some(lbl) = &b.label {
                     lines.push(lbl.clone());
                 } else if rtxt > 0.0 {
-                    lines.push(format!("外框 {}×{}mm（R{}）", wtxt, htxt, fmt_mm(rtxt)));
+                    lines.push(format!("Board {}×{} mm (R{})", wtxt, htxt, fmt_mm(rtxt)));
                 } else {
-                    lines.push(format!("外框 {}×{}mm", wtxt, htxt));
+                    lines.push(format!("Board {}×{} mm", wtxt, htxt));
                 }
             }
             let n = lines.len() as i32;
-            let line_gap_px: f64 = 34.0; // 行距（像素）
+            let line_gap_px: f64 = 34.0; // line gap (px)
             for (i, txt) in lines.into_iter().enumerate() {
                 let idx = i as i32;
                 let dy = (idx - (n - 1) / 2) as f64 * line_gap_px;
@@ -724,7 +724,7 @@ fn build_blueprint_svg(
                 ));
             }
         }
-        // 不再绘制尺寸引线/箭头，仅保留文字说明（关键信息）
+        // Only keep text, no dimension leader/arrow graphics
         cursor_y_mm += bh + pad_mm;
         // Horizontal line after board row
         draw_hline(&mut s, cursor_y_mm);
@@ -784,9 +784,9 @@ where
     out
 }
 
-// 将毫米数格式化为“精确值”：
-// - 近似整数（1e-6）按整数显示
-// - 否则最多保留三位小数，并去掉末尾0
+// Format millimeters:
+// - Near-integers (1e-6) as integers
+// - Else up to 3 decimals, trim trailing zeros
 fn fmt_mm(v: f64) -> String {
     if (v - v.round()).abs() < 1e-6 {
         format!("{:.0}", v)
@@ -803,40 +803,40 @@ fn label_for_piece(p: &Piece) -> String {
     match p.type_.as_str() {
         "circle" => {
             let d = p.d.unwrap_or_else(|| p.r.unwrap_or(0.0) * 2.0);
-            format!("圆（直径 {}mm）", f(d))
+            format!("Circle (diameter {} mm)", f(d))
         }
         "rect" => {
             let w = p.w.unwrap_or(0.0);
             let h = p.h.unwrap_or(0.0);
             if (w - h).abs() < 1e-6 {
-                format!("正方形（边长 {}mm）", f(w))
+                format!("Square (side {} mm)", f(w))
             } else {
-                format!("长方形（{}×{}mm）", f(w), f(h))
+                format!("Rectangle ({}×{} mm)", f(w), f(h))
             }
         }
         "regular_polygon" => {
             let n = p.n.unwrap_or(3);
             let side = p.side.unwrap_or(0.0);
             match n {
-                5 => format!("正五边形（边长 {}mm）", f(side)),
-                6 => format!("正六边形（边长 {}mm）", f(side)),
-                _ => format!("正{}边形（边长 {}mm）", n, f(side)),
+                5 => format!("Regular pentagon (side {} mm)", f(side)),
+                6 => format!("Regular hexagon (side {} mm)", f(side)),
+                _ => format!("Regular {}-gon (side {} mm)", n, f(side)),
             }
         }
-        "equilateral_triangle" => format!("正三角形（边长 {}mm）", f(p.side.unwrap_or(0.0))),
+        "equilateral_triangle" => format!("Equilateral triangle (side {} mm)", f(p.side.unwrap_or(0.0))),
         "right_triangle" => format!(
-            "直角三角形（直角边 {}×{}mm）",
+            "Right triangle (legs {}×{} mm)",
             f(p.a.unwrap_or(0.0)),
             f(p.b.unwrap_or(0.0))
         ),
         "isosceles_trapezoid" => format!(
-            "等腰梯形（下底 {}mm，上底 {}mm，高 {}mm）",
+            "Isosceles trapezoid (bottom {} mm, top {} mm, height {} mm)",
             f(p.base_bottom.unwrap_or(0.0)),
             f(p.base_top.unwrap_or(0.0)),
             f(p.height.unwrap_or(0.0))
         ),
         "parallelogram" => format!(
-            "平行四边形（底 {}mm，顶边偏移 {}mm，高 {}mm）",
+            "Parallelogram (base {} mm, top offset {} mm, height {} mm)",
             f(p.base.unwrap_or(0.0)),
             f(p.offset_top.unwrap_or(0.0)),
             f(p.height.unwrap_or(0.0))

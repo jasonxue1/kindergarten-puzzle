@@ -6,7 +6,7 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use web_sys::{Document, Event, FileReader, HtmlInputElement, Window};
 
-use crate::{draw, build_puzzle_from_counts, log, CountsSpec, Puzzle, ShapesCatalog, State, assign_piece_colors};
+use crate::{draw, build_puzzle_from_counts, log, CountsSpec, Puzzle, ShapesCatalog, State, assign_piece_colors, update_note_dom};
 
 // Wires up the file input handler for loading JSON puzzle files.
 pub fn attach_file_input(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
@@ -46,6 +46,7 @@ pub fn attach_file_input(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
                         s.data = p;
                         assign_piece_colors(&mut s.data);
                         s.initial_data = s.data.clone();
+                        update_note_dom(&s);
                         draw(&mut s);
                     }
                 } else if let Ok(spec) = serde_json::from_str::<CountsSpec>(&text) {
@@ -76,12 +77,13 @@ pub fn attach_file_input(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
                                 s.data = p;
                                 assign_piece_colors(&mut s.data);
                                 s.initial_data = s.data.clone();
+                                update_note_dom(&s);
                                 draw(&mut s);
                             }
                             Err(e) => {
                                 log(&format!("Failed to parse shapes catalog: {e}"));
                                 let _ = st3.borrow().window.alert_with_message(
-                                    "无法解析 shapes.json，请检查文件格式。",
+                                    "Failed to parse shapes.json. Please check the file format.",
                                 );
                             }
                         }
@@ -91,7 +93,7 @@ pub fn attach_file_input(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
                     let _ = st2
                         .borrow()
                         .window
-                        .alert_with_message("无法识别的拼图 JSON 文件。");
+                        .alert_with_message("Unrecognized puzzle JSON format.");
                 }
             }));
             reader.set_onload(Some(onload.as_ref().unchecked_ref()));

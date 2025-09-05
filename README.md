@@ -3,8 +3,8 @@
 Rust + WASM puzzle viewer/editor for the browser, plus a Rust CLI that exports
 PNG blueprints from JSON specs.
 
-Web app: drag to move, Q/E rotate, F flip. You can export PNG from the toolbar
-button or via CLI.
+Web app: drag to move, Q/E rotate, F flip. Export PNG from the toolbar or via CLI.
+Language: English by default, switchable to Chinese in the UI.
 
 ## Project Layout
 
@@ -41,13 +41,16 @@ Open <http://localhost:5173/>
 
 ## Usage (Web)
 
-- Default loads a built‑in puzzle expanded from `puzzle/k11.json` and
-  `shapes.json`.
-- To load another JSON from `puzzle/`, use `?p=<name>` where the app fetches
-  `puzzle/<name>.json`. Example: `/?p=k11`.
-- The file picker can load any local `*.json` in either format (full pieces, or
-  counts+board).
-- Button: 保存JSON — downloads the current state as `puzzle.json`.
+- Default loads a built‑in puzzle expanded from `puzzle/k11.json` and `shapes.json`.
+- To load another JSON from `puzzle/`, use `?p=<name>`; the app fetches `puzzle/<name>.json`.
+  Example: `/?p=k11`.
+- The file picker can load any local `*.json` in either format (full pieces, or counts+board).
+- Save JSON button downloads the current state as `puzzle.json`.
+
+Notes and Tutor
+
+- NOTE: Optional per‑puzzle note fields `note_en` and `note_zh` are supported and shown under the toolbar.
+- TUTOR: A global help panel lists each toolbar button’s function and hotkeys. Toggle via the Tutor button.
 
 Coloring
 
@@ -118,23 +121,24 @@ Two supported inputs:
 
 Notes on labels
 
-- `shapes.json`: 可为每个形状添加可读文案 `label`（左列展示）。
-- `puzzle/*.json`: 可在 `board` 中添加：
-  - `label`：外框左列单行文案（适用于规则/简单外框）。
-  - `label_lines`：外框左列多行文案（优先于 `label`，适用于不规则外框，描述更完整）。
-  - 若两者均未提供，规则外框将回退为自动文案（如“外框 113×123mm（R15）”）。
+- `shapes.json`: You can set human‑readable labels per shape for export.
+  - For bilingual output, prefer `label_en` and/or `label_zh`.
+  - If only `label` is provided, it is used for Chinese; English exports will fall back to auto labels.
+- `puzzle/*.json`: In `board`, you may include:
+  - `label`: Single‑line text for the board (left column).
+  - `label_lines`: Multi‑line text for the board (takes precedence).
+  - If neither is provided, a default auto label is generated, e.g. "Board 113×123 mm (R15)".
 
 ### Full Pieces (web play layout)
 
-The web app still accepts the original piece‑list JSON with explicit `pieces`
-and positions.
+The web app still accepts the original piece‑list JSON with explicit `pieces` and positions.
 
 ## Export PNG
 
 Two ways:
 
 - Method 1: In the web app
-  - Click the toolbar button "下载 PNG" to download the current canvas as PNG.
+  - Click the toolbar button "Download PNG" to download the current canvas as PNG. The export uses the current UI language for labels.
 
 - Method 2: Via CLI (just)
   - From a JSON file (uses `shapes.json` by default):
@@ -167,9 +171,9 @@ Two ways:
   just png-id k11 out.png 6
   ```
 
-导出格式：三列表格（文案｜数量｜图片）。
-左列：文字描述（只含关键信息，精确尺寸）；中列：数量；右列：对应图形。
-第一行是外框（如：外框 113×123mm（R15）），其后每行一种零件，右侧平铺该组所有轮廓。
+Export format: 3 columns (label | count | shapes).
+Left: concise text with exact dimensions; Middle: piece count; Right: outlines tiled for each group.
+The first row is the board (e.g., "Board 113×123 mm (R15)"); subsequent rows list each part type.
 
 ## Shell Completions (Nushell)
 
