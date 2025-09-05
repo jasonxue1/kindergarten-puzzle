@@ -164,6 +164,8 @@ struct State {
     // movement constraints
     restrict_mode: bool, // L toggles: prevent overlaps with pieces/border while moving
     shift_down: bool,    // temporary constraint while Shift held
+    // initial snapshot for reset
+    initial_data: Puzzle,
 }
 
 thread_local! {
@@ -655,6 +657,26 @@ fn attach_ui(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
     let doc = state.borrow().document.clone();
     // File input
     upload::attach_file_input(state.clone())?;
+
+    // Reset button (restore to initial state)
+    if let Some(btn) = doc.get_element_by_id("resetPuzzle") {
+        let btn: HtmlElement = btn.dyn_into().unwrap();
+        let st = state.clone();
+        let onclick = Closure::<dyn FnMut()>::wrap(Box::new(move || {
+            let mut s = st.borrow_mut();
+            s.data = s.initial_data.clone();
+            s.dragging_idx = None;
+            s.rot_vel = 0.0;
+            s.slow_mode = false;
+            s.restrict_mode = false;
+            s.shift_down = false;
+            s.scale = DEFAULT_MM2PX;
+            s.offset = (0.0, 0.0);
+            draw(&mut s);
+        }));
+        btn.set_onclick(Some(onclick.as_ref().unchecked_ref()));
+        onclick.forget();
+    }
 
     // Export PNG (blueprint; deterministic)
     if let Some(btn) = doc.get_element_by_id("exportPng") {
@@ -1242,6 +1264,7 @@ pub fn start() -> Result<(), JsValue> {
         rot_speed_slow: 30.0,
         restrict_mode: false,
         shift_down: false,
+        initial_data: Puzzle { units: None, board: None, pieces: Vec::new() },
     }));
 
     STATE.with(|st| st.replace(Some(state.clone())));
@@ -1250,6 +1273,7 @@ pub fn start() -> Result<(), JsValue> {
         if let Some(st_rc) = st.borrow().as_ref() {
             let mut s = st_rc.borrow_mut();
             assign_piece_colors(&mut s.data);
+            s.initial_data = s.data.clone();
         }
     });
     attach_ui(state.clone())?;
@@ -1295,6 +1319,7 @@ async fn fetch_and_load_puzzle(
             let mut s = st_rc.borrow_mut();
             s.data = puzzle;
             assign_piece_colors(&mut s.data);
+            s.initial_data = s.data.clone();
             s.window = window.clone();
             s.document = document.clone();
             s.canvas = canvas.clone();
