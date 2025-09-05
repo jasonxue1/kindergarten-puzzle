@@ -1,1 +1,7 @@
-exclude = [".direnv/**", ".git/**"]
+exclude = [
+  ".direnv/**",
+  ".git/**",
+  "web/node_modules/**",
+  "pkg/**",
+  "**/target/**",
+]

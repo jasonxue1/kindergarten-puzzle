@@ -456,46 +456,61 @@ fn assign_piece_colors(p: &mut Puzzle) {
 fn update_note_dom(state: &State) {
     let doc = &state.document;
     if let Some(el) = doc.get_element_by_id("note") {
-        let el: HtmlElement = match el.dyn_into() { Ok(e) => e, Err(_) => return };
+        let el: HtmlElement = match el.dyn_into() {
+            Ok(e) => e,
+            Err(_) => return,
+        };
         let mut txt = String::new();
         let lang = state.lang.as_str();
         if lang == "zh" {
-            if let Some(n) = &state.data.note_zh { txt = n.clone(); }
-            else if let Some(n) = &state.data.note_en { txt = n.clone(); }
-        } else {
-            if let Some(n) = &state.data.note_en { txt = n.clone(); }
-            else if let Some(n) = &state.data.note_zh { txt = n.clone(); }
+            if let Some(n) = &state.data.note_zh {
+                txt = n.clone();
+            } else if let Some(n) = &state.data.note_en {
+                txt = n.clone();
+            }
+        } else if let Some(n) = &state.data.note_en {
+            txt = n.clone();
+        } else if let Some(n) = &state.data.note_zh {
+            txt = n.clone();
         }
         el.set_inner_text(&txt);
     }
 }
 
 fn update_status_dom(state: &State) {
-    if let Some(el) = state.document.get_element_by_id("status") {
-        if let Ok(el) = el.dyn_into::<HtmlElement>() {
-            let lock_en = if state.shift_down {
-                "Lock: Temporary"
-            } else if state.restrict_mode {
-                "Lock: Locked"
-            } else {
-                "Lock: Unlocked"
-            };
-            let lock_zh = if state.shift_down {
-                "锁定：临时锁定"
-            } else if state.restrict_mode {
-                "锁定：已锁定"
-            } else {
-                "锁定：未锁定"
-            };
-            let speed_en = if state.slow_mode { "Speed: Slow" } else { "Speed: Fast" };
-            let speed_zh = if state.slow_mode { "速度：慢" } else { "速度：快" };
-            let txt = if state.lang == "zh" {
-                format!("{}  |  {}", lock_zh, speed_zh)
-            } else {
-                format!("{}  |  {}", lock_en, speed_en)
-            };
-            el.set_inner_text(&txt);
-        }
+    if let Some(el) = state.document.get_element_by_id("status")
+        && let Ok(el) = el.dyn_into::<HtmlElement>()
+    {
+        let lock_en = if state.shift_down {
+            "Lock: Temporary"
+        } else if state.restrict_mode {
+            "Lock: Locked"
+        } else {
+            "Lock: Unlocked"
+        };
+        let lock_zh = if state.shift_down {
+            "锁定：临时锁定"
+        } else if state.restrict_mode {
+            "锁定：已锁定"
+        } else {
+            "锁定：未锁定"
+        };
+        let speed_en = if state.slow_mode {
+            "Speed: Slow"
+        } else {
+            "Speed: Fast"
+        };
+        let speed_zh = if state.slow_mode {
+            "速度：慢"
+        } else {
+            "速度：快"
+        };
+        let txt = if state.lang == "zh" {
+            format!("{}  |  {}", lock_zh, speed_zh)
+        } else {
+            format!("{}  |  {}", lock_en, speed_en)
+        };
+        el.set_inner_text(&txt);
     }
 }
 
@@ -753,7 +768,11 @@ fn attach_ui(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
                 && let Ok(sel) = input.dyn_into::<web_sys::HtmlSelectElement>()
             {
                 let v = sel.value();
-                s.lang = if v.to_lowercase().starts_with("zh") { "zh".to_string() } else { "en".to_string() };
+                s.lang = if v.to_lowercase().starts_with("zh") {
+                    "zh".to_string()
+                } else {
+                    "en".to_string()
+                };
                 update_note_dom(&s);
                 update_status_dom(&s);
             }
@@ -955,7 +974,11 @@ fn attach_ui(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
                             let dir = if s.rot_vel > 0.0 { 1.0 } else { -1.0 };
                             s.rot_vel = dir * new_speed;
                         }
-                        log(if s.slow_mode { "Switched to slow mode" } else { "Switched to fast mode" });
+                        log(if s.slow_mode {
+                            "Switched to slow mode"
+                        } else {
+                            "Switched to fast mode"
+                        });
                         update_status_dom(&s);
                     }
                     "f" => {
@@ -965,7 +988,11 @@ fn attach_ui(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
                     // toggle restrict movement mode
                     "l" => {
                         s.restrict_mode = !s.restrict_mode;
-                        log(if s.restrict_mode { "Restriction: ON (no overlaps with pieces/border)" } else { "Restriction: OFF" });
+                        log(if s.restrict_mode {
+                            "Restriction: ON (no overlaps with pieces/border)"
+                        } else {
+                            "Restriction: OFF"
+                        });
                         update_status_dom(&s);
                     }
                     // track Shift press for temporary constraint
@@ -1339,7 +1366,13 @@ pub fn start() -> Result<(), JsValue> {
         rot_speed_slow: 30.0,
         restrict_mode: false,
         shift_down: false,
-        initial_data: Puzzle { units: None, board: None, pieces: Vec::new(), note_en: None, note_zh: None },
+        initial_data: Puzzle {
+            units: None,
+            board: None,
+            pieces: Vec::new(),
+            note_en: None,
+            note_zh: None,
+        },
         lang: "en".to_string(),
     }));
 

@@ -823,7 +823,10 @@ fn label_for_piece(p: &Piece) -> String {
                 _ => format!("Regular {}-gon (side {} mm)", n, f(side)),
             }
         }
-        "equilateral_triangle" => format!("Equilateral triangle (side {} mm)", f(p.side.unwrap_or(0.0))),
+        "equilateral_triangle" => format!(
+            "Equilateral triangle (side {} mm)",
+            f(p.side.unwrap_or(0.0))
+        ),
         "right_triangle" => format!(
             "Right triangle (legs {}×{} mm)",
             f(p.a.unwrap_or(0.0)),

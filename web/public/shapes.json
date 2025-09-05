@@ -1,0 +1,67 @@
+{
+  "shapes": [
+    {
+      "id": "circle_d30",
+      "type": "circle",
+      "d": 30,
+      "label": "圆（直径 30mm）"
+    },
+    {
+      "id": "square_30",
+      "type": "rect",
+      "w": 30,
+      "h": 30,
+      "label": "正方形（边长 30mm）"
+    },
+    {
+      "id": "rect_30x60",
+      "type": "rect",
+      "w": 30,
+      "h": 60,
+      "label": "长方形（30×60mm）"
+    },
+    {
+      "id": "hex_side30",
+      "type": "regular_polygon",
+      "n": 6,
+      "side": 30,
+      "label": "正六边形（边长 30mm）"
+    },
+    {
+      "id": "pent_side30",
+      "type": "regular_polygon",
+      "n": 5,
+      "side": 30,
+      "label": "正五边形（边长 30mm）"
+    },
+    {
+      "id": "rt_30x60",
+      "type": "right_triangle",
+      "a": 30,
+      "b": 60,
+      "label": "直角三角形（直角边 30×60mm）"
+    },
+    {
+      "id": "trap_60_30_30",
+      "type": "isosceles_trapezoid",
+      "base_bottom": 60,
+      "base_top": 30,
+      "height": 30,
+      "label": "等腰梯形（下底 60mm，上底 30mm，高 30mm）"
+    },
+    {
+      "id": "para_45_15_30",
+      "type": "parallelogram",
+      "base": 45,
+      "offset_top": 15,
+      "height": 30,
+      "label": "平行四边形（底 45mm，顶边偏移 15mm，高 30mm）"
+    },
+    {
+      "id": "tri_eq_30",
+      "type": "equilateral_triangle",
+      "side": 30,
+      "label": "正三角形（边长 30mm）"
+    }
+  ]
+}

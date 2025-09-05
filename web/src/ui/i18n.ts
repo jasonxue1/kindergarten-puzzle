@@ -1,0 +1,30 @@
+export type Lang = "en" | "zh";
+
+export const strings = {
+  en: {
+    home: "Home",
+    reset: "Reset",
+    download: "Download PNG",
+    tutor: "Tutor",
+    language: "Language:",
+    help: "Drag; Q/E rotate (S toggles speed); L restrict; Shift temp restrict; wheel fine-rotate; F mirror",
+    lockUnlocked: "Lock: Unlocked",
+    lockLocked: "Lock: Locked",
+    lockTemp: "Lock: Temporary",
+    speedFast: "Speed: Fast",
+    speedSlow: "Speed: Slow",
+  },
+  zh: {
+    home: "返回主页",
+    reset: "重开",
+    download: "下载 PNG",
+    tutor: "教程",
+    language: "语言:",
+    help: "拖拽；Q/E旋转（S快/慢）；L限制移动；按住Shift临时限制；滚轮微调；F镜像",
+    lockUnlocked: "锁定：未锁定",
+    lockLocked: "锁定：已锁定",
+    lockTemp: "锁定：临时锁定",
+    speedFast: "速度：快",
+    speedSlow: "速度：慢",
+  },
+} as const;

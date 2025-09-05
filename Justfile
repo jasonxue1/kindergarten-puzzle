@@ -21,9 +21,9 @@ build-dev:
 clean:
     rm -rf {{ OUT_DIR }}
 
-# Serve the repository root locally at http://localhost:5173
+# Serve the app locally using pnpm (modern web UI)
 serve:
-    python3 -m http.server 5173
+    cd web && pnpm install && pnpm dev
 
 # Rebuild on changes (requires watchexec; optional)
 watch:

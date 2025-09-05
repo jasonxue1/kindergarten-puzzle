@@ -1,24 +1,45 @@
+############################
 # OS / editor
+############################
 .DS_Store
+Thumbs.db
 .idea/
 .vscode/
+*.swp
+*.swo
+.history/
 
-# direnv
+############################
+# Dev shells / Nix
+############################
 .direnv/
-
-# Nix
 result
 
-# wasm-pack output at repo root
-pkg/
-
-# Example outputs
-out.png
-
-# Rust build artifacts
+############################
+# Rust / Cargo
+############################
 target/
-blueprint/target/
-puzzle-wasm/target/
 
-# wasm-pack output when run from crate dir
+############################
+# wasm-pack outputs
+############################
+pkg/
 puzzle-wasm/pkg/
+
+############################
+# Modern web UI (Vite + pnpm)
+############################
+web/node_modules/
+web/dist/
+web/.vite/
+web/npm-debug.log*
+web/yarn-error.log*
+web/pnpm-debug.log*
+web/.env
+web/.env.local
+web/.env.*.local
+
+############################
+# Example / generated outputs
+############################
+out.png

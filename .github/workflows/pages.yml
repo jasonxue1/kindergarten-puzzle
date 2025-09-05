@@ -50,10 +50,36 @@ jobs:
           name: wasm-pkg
           path: pkg
 
-      - name: Prepare static site
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "pnpm"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install web dependencies
+        working-directory: web
+        run: pnpm install --frozen-lockfile=false
+
+      - name: Build modern web UI (Vite)
+        working-directory: web
+        run: pnpm build
+
+      - name: Prepare site for Pages
         run: |
+          rm -rf dist
           mkdir -p dist
-          cp -r index.html pkg shapes.json puzzle dist/
+          # Copy Vite build
+          cp -r web/dist/* dist/
+          # Include WASM pkg and static data
+          cp -r pkg dist/
+          cp -r puzzle dist/
+          cp shapes.json dist/
+          cp puzzles.json dist/
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

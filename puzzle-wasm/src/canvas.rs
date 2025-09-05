@@ -17,4 +17,3 @@ pub fn set_stroke_style(ctx: &CanvasRenderingContext2d, color: &str) {
         &JsValue::from_str(color),
     );
 }
-

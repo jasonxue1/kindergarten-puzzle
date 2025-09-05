@@ -37,7 +37,7 @@ just build
 just serve
 ```
 
-Open <http://localhost:5173/>
+Open <http://localhost:5174/>
 
 ## Usage (Web)
 
@@ -49,12 +49,15 @@ Open <http://localhost:5173/>
 
 Notes and Tutor
 
-- NOTE: Optional per‑puzzle note fields `note_en` and `note_zh` are supported and shown under the toolbar.
-- TUTOR: A global help panel lists each toolbar button’s function and hotkeys. Toggle via the Tutor button.
+- NOTE: Optional per‑puzzle note fields `note_en` and `note_zh` are supported
+  and shown under the toolbar.
+- TUTOR: A global help panel lists each toolbar button’s function and hotkeys.
+  Toggle via the Tutor button.
 
 Coloring
 
-- Pieces use a fixed 8‑color palette in this order: red, orange, yellow, green, cyan, blue, purple, pink.
+- Pieces use a fixed 8‑color palette in this order: red, orange, yellow,
+  green, cyan, blue, purple, pink.
 - Colors are assigned deterministically by first grouping all pieces by type,
   then assigning colors by the grouped order with `index % 8`.
 - Each piece’s color is stable during interaction (drag/rotate) and doesn’t
@@ -122,22 +125,26 @@ Notes on labels
 
 - `shapes.json`: You can set human‑readable labels per shape for export.
   - For bilingual output, prefer `label_en` and/or `label_zh`.
-  - If only `label` is provided, it is used for Chinese; English exports will fall back to auto labels.
+  - If only `label` is provided, it is used for Chinese; English exports will
+    fall back to auto labels.
 - `puzzle/*.json`: In `board`, you may include:
   - `label`: Single‑line text for the board (left column).
   - `label_lines`: Multi‑line text for the board (takes precedence).
-  - If neither is provided, a default auto label is generated, e.g. "Board 113×123 mm (R15)".
+  - If neither is provided, a default auto label is generated, e.g.
+    "Board 113×123 mm (R15)".
 
 ### Full Pieces (web play layout)
 
-The web app still accepts the original piece‑list JSON with explicit `pieces` and positions.
+The web app still accepts the original piece‑list JSON with explicit `pieces`
+and positions.
 
 ## Export PNG
 
 Two ways:
 
 - Method 1: In the web app
-  - Click the toolbar button "Download PNG" to download the current canvas as PNG. The export uses the current UI language for labels.
+  - Click the toolbar button "Download PNG" to download the current canvas as
+    PNG. The export uses the current UI language for labels.
 
 - Method 2: Via CLI (just)
   - From a JSON file (uses `shapes.json` by default):
@@ -171,8 +178,9 @@ Two ways:
   ```
 
 Export format: 3 columns (label | count | shapes).
-Left: concise text with exact dimensions; Middle: piece count; Right: outlines tiled for each group.
-The first row is the board (e.g., "Board 113×123 mm (R15)"); subsequent rows list each part type.
+Left: concise text with exact dimensions; Middle: piece count; Right: outlines
+tiled for each group. The first row is the board (e.g., "Board 113×123 mm
+(R15)"); subsequent rows list each part type.
 
 ## Shell Completions (Nushell)
 
@@ -188,8 +196,35 @@ No manual setup needed; run `nu` inside `nix develop`.
 
 ## GitHub Pages
 
-- Ensure `pkg/` (generated via `just build`) is present in the repo and committed.
-- Push `index.html`, `pkg/`, and `puzzle/` to the default branch.
-- In repo Settings → Pages, choose Source: Deploy from branch, Branch: `main`
-  (or your default), Folder: `/ (root)`.
+- Build WASM: `just build` (outputs `pkg/`).
+- Build modern UI: `cd web && pnpm install && pnpm build` (outputs `web/dist`).
+- Deploy the contents of `web/dist` to Pages. Ensure `pkg/` and `puzzle/` are
+  also published at paths your app expects.
 - Visit your Pages URL. Use `/?p=k11` to load that puzzle.
+  Modern Web UI (React + Vite)
+
+- A modern React + Vite + TypeScript UI is scaffolded under `web/` for a more
+  modular architecture.
+- It renders the same element IDs so the existing WASM logic continues to work.
+- The UI includes a Toolbar, Status bar, Canvas, Note area, and a Tutor toggle
+  point for future help overlays.
+
+Run with the same two commands (pnpm required for serving):
+
+- Build WASM bundle to `pkg/`:
+
+  just build
+
+- Serve locally (starts the modern UI via pnpm):
+
+  just serve
+
+Notes:
+
+- `just serve` runs `pnpm install && pnpm dev` in `web/`. Ensure pnpm is
+  installed.
+- During development, the dev server copies `puzzles.json`, `shapes.json`, and
+  the `puzzle/` folder into `web/public/` so the chooser can list and open
+  puzzles as before.
+- The React app sets the language via the existing `#langSel` element so the
+  Rust side stays in sync for exports.

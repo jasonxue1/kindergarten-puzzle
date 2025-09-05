@@ -26,24 +26,28 @@
         };
       in {
         devShells.default = pkgs.mkShell {
-          packages = [
-            rust
-            pkgs.wasm-pack
-            pkgs.just
-            pkgs.python3
-            pkgs.watchexec
-            pkgs.nushell
-            pkgs.alejandra
-            pkgs.deadnix
-            pkgs.nixd
-            pkgs.clang
-            pkgs.pkg-config
-            pkgs.taplo
-            pkgs.prettierd
-            pkgs.prettier
-            pkgs.shfmt
-            # add mado and mdsf
-          ];
+          packages = with pkgs;
+            [
+              wasm-pack
+              just
+              python3
+              watchexec
+              nushell
+              alejandra
+              deadnix
+              nixd
+              clang
+              pkg-config
+              taplo
+              prettierd
+              prettier
+              shfmt
+              pnpm
+              # add mado and mdsf
+            ]
+            ++ [
+              rust
+            ];
         };
       }
     );

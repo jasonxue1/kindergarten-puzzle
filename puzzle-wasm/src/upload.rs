@@ -1,12 +1,15 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use wasm_bindgen::closure::Closure;
 use wasm_bindgen::JsCast;
+use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::*;
 use web_sys::{Document, Event, FileReader, HtmlInputElement, Window};
 
-use crate::{draw, build_puzzle_from_counts, log, CountsSpec, Puzzle, ShapesCatalog, State, assign_piece_colors, update_note_dom, update_status_dom};
+use crate::{
+    CountsSpec, Puzzle, ShapesCatalog, State, assign_piece_colors, build_puzzle_from_counts, draw,
+    log, update_note_dom, update_status_dom,
+};
 
 // Wires up the file input handler for loading JSON puzzle files.
 pub fn attach_file_input(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
@@ -56,10 +59,16 @@ pub fn attach_file_input(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
                     let win: Window = st2.borrow().window.clone();
                     wasm_bindgen_futures::spawn_local(async move {
                         let shapes_text = if let Some(sf) = spec.shapes_file.clone() {
-                            match wasm_bindgen_futures::JsFuture::from(win.fetch_with_str(&sf)).await {
+                            match wasm_bindgen_futures::JsFuture::from(win.fetch_with_str(&sf))
+                                .await
+                            {
                                 Ok(resp_value) => {
                                     match resp_value.dyn_into::<web_sys::Response>() {
-                                        Ok(resp) => match wasm_bindgen_futures::JsFuture::from(resp.text().unwrap()).await {
+                                        Ok(resp) => match wasm_bindgen_futures::JsFuture::from(
+                                            resp.text().unwrap(),
+                                        )
+                                        .await
+                                        {
                                             Ok(t) => t.as_string().unwrap_or_default(),
                                             Err(_) => include_str!("../../shapes.json").to_string(),
                                         },
