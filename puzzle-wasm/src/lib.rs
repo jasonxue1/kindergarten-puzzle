@@ -435,6 +435,7 @@ fn draw(state: &mut State) {
             &color,
         );
     }
+    update_validation_dom(state);
 }
 
 fn assign_piece_colors(p: &mut Puzzle) {
@@ -511,6 +512,102 @@ fn update_status_dom(state: &State) {
             format!("{}  |  {}", lock_en, speed_en)
         };
         el.set_inner_text(&txt);
+    }
+}
+
+fn update_validation_dom(state: &State) {
+    let doc = &state.document;
+    let el = match doc.get_element_by_id("validationContent") {
+        Some(e) => match e.dyn_into::<HtmlElement>() {
+            Ok(v) => v,
+            Err(_) => return,
+        },
+        None => return,
+    };
+
+    // Gather board geometry
+    let board_geom = state.data.board.as_ref().and_then(|b| board_to_geom(b));
+
+    // Gather piece geoms
+    let mut geoms: Vec<(usize, Vec<Point>)> = Vec::new();
+    for (i, p) in state.data.pieces.iter().enumerate() {
+        if let Some(g) = &p.__geom {
+            geoms.push((i, g.clone()));
+        } else {
+            let (g, _c) = piece_geom(p);
+            geoms.push((i, g));
+        }
+    }
+
+    let mut errors_en: Vec<String> = Vec::new();
+    let mut errors_zh: Vec<String> = Vec::new();
+
+    // 1) Piece-piece overlaps
+    for a in 0..geoms.len() {
+        for b in (a + 1)..geoms.len() {
+            if polygons_intersect(&geoms[a].1, &geoms[b].1) {
+                errors_en.push(format!("Piece {} overlaps piece {}", a + 1, b + 1));
+                errors_zh.push(format!("拼图 {} 与拼图 {} 重叠", a + 1, b + 1));
+            }
+        }
+    }
+
+    if let Some(bg) = &board_geom {
+        let bn = bg.len();
+        // helpers
+        let edges_cross = |poly: &Vec<Point>| -> bool {
+            let an = poly.len();
+            for i in 0..an {
+                let a1 = poly[i];
+                let a2 = poly[(i + 1) % an];
+                for j in 0..bn {
+                    let b1 = bg[j];
+                    let b2 = bg[(j + 1) % bn];
+                    if segments_intersect(a1, a2, b1, b2) {
+                        return true;
+                    }
+                }
+            }
+            false
+        };
+        let fully_inside =
+            |poly: &Vec<Point>| -> bool { poly.iter().all(|p| poly_contains_point(bg, *p)) };
+
+        for (idx, pg) in &geoms {
+            if edges_cross(pg) {
+                errors_en.push(format!("Piece {} overlaps the border", idx + 1));
+                errors_zh.push(format!("拼图 {} 与边框重叠", idx + 1));
+            } else if !fully_inside(pg) {
+                errors_en.push(format!("Piece {} is outside the border", idx + 1));
+                errors_zh.push(format!("拼图 {} 在边框外", idx + 1));
+            }
+        }
+    }
+
+    if state.lang == "zh" {
+        if errors_zh.is_empty() {
+            el.set_inner_html("<div style=\"opacity:.7\">成功</div>");
+        } else {
+            let mut html = String::new();
+            html.push_str("<ul style=\"margin:0;padding-left:18px\">");
+            for e in errors_zh {
+                html.push_str(&format!("<li>{}</li>", e));
+            }
+            html.push_str("</ul>");
+            el.set_inner_html(&html);
+        }
+    } else {
+        if errors_en.is_empty() {
+            el.set_inner_html("<div style=\"opacity:.7\">Success</div>");
+        } else {
+            let mut html = String::new();
+            html.push_str("<ul style=\"margin:0;padding-left:18px\">");
+            for e in errors_en {
+                html.push_str(&format!("<li>{}</li>", e));
+            }
+            html.push_str("</ul>");
+            el.set_inner_html(&html);
+        }
     }
 }
 
@@ -775,6 +872,7 @@ fn attach_ui(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
                 };
                 update_note_dom(&s);
                 update_status_dom(&s);
+                update_validation_dom(&s);
             }
         }));
         sel.set_onchange(Some(onchange.as_ref().unchecked_ref()));

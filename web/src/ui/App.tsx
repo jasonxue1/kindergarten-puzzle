@@ -233,8 +233,17 @@ const App: React.FC = () => {
         <div id="status" className="status">
           &nbsp;
         </div>
-        <canvas id="cv" width={1200} height={800} />
-        <div id="note" style={{ padding: "8px 12px" }} />
+        {/* Main content row: canvas + side panel */}
+        <div
+          className="content-row"
+          style={{ display: "flex", alignItems: "stretch", minHeight: 300 }}
+        >
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <canvas id="cv" width={1200} height={800} />
+            <div id="note" style={{ padding: "8px 12px" }} />
+          </div>
+          <ValidationPanel lang={lang} />
+        </div>
       </div>
       {showChooser && (
         <div
@@ -310,3 +319,65 @@ const App: React.FC = () => {
 };
 
 export default App;
+
+const ValidationPanel: React.FC<{ lang: Lang }> = ({ lang }) => {
+  const [open, setOpen] = useState(true);
+  const title = lang === "zh" ? "错误提示" : "Validation";
+  const success = lang === "zh" ? "成功" : "Success";
+  return (
+    <aside
+      id="validationPanel"
+      className={`side-panel ${open ? "" : "collapsed"}`}
+      style={{
+        width: open ? 300 : 36,
+      }}
+    >
+      <div
+        className="panel-header"
+        style={{ display: "flex", alignItems: "center" }}
+      >
+        <button
+          className="icon-btn"
+          aria-label={
+            open
+              ? lang === "zh"
+                ? "折叠"
+                : "Collapse"
+              : lang === "zh"
+                ? "展开"
+                : "Expand"
+          }
+          title={
+            open
+              ? lang === "zh"
+                ? "折叠"
+                : "Collapse"
+              : lang === "zh"
+                ? "展开"
+                : "Expand"
+          }
+          onClick={() => setOpen(!open)}
+          style={{
+            padding: 4,
+            height: 28,
+            width: 28,
+            display: "grid",
+            placeItems: "center",
+          }}
+        >
+          <span aria-hidden>{open ? "⟨" : "⟩"}</span>
+        </button>
+        {open && <h3 style={{ margin: "0 0 0 8px", fontSize: 16 }}>{title}</h3>}
+      </div>
+      {open && (
+        <div
+          id="validationContent"
+          className="panel-body"
+          style={{ padding: "8px 10px", fontSize: 14 }}
+        >
+          <div style={{ opacity: 0.7 }}>{success}</div>
+        </div>
+      )}
+    </aside>
+  );
+};

@@ -109,6 +109,31 @@
       html[data-theme="dark"] canvas {
         background: var(--ctp-mocha-base);
       }
+      /* Layout: canvas + right panel */
+      .content-row {
+        gap: 0;
+      }
+      .side-panel {
+        display: flex;
+        flex-direction: column;
+        background: var(--ctp-latte-base);
+        border-left: 1px solid var(--ctp-latte-surface0);
+        transition: width 0.15s ease-in-out;
+      }
+      html[data-theme="dark"] .side-panel {
+        background: var(--ctp-mocha-base);
+        border-left-color: var(--ctp-mocha-surface0);
+      }
+      .side-panel .panel-header {
+        padding: 8px;
+        border-bottom: 1px solid var(--ctp-latte-surface0);
+      }
+      html[data-theme="dark"] .side-panel .panel-header {
+        border-bottom-color: var(--ctp-mocha-surface0);
+      }
+      .side-panel.collapsed .panel-body {
+        display: none;
+      }
       button,
       select,
       input {
