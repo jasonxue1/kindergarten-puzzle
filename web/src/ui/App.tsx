@@ -21,18 +21,28 @@ const App: React.FC = () => {
   useEffect(() => {
     // Initialize the existing WASM app which expects specific element IDs present in the DOM.
     (async () => {
-      const jsUrl = new URL(
-        "/pkg/puzzle_wasm.js",
-        window.location.origin,
-      ).toString();
-      // Tell Vite not to analyze this import; let the browser load it from /public
-      const mod: any = await import(/* @vite-ignore */ jsUrl);
-      const init = mod?.default ?? mod;
-      // Pass explicit wasm URL to avoid path resolution issues
-      const wasmUrl = new URL(
-        "/pkg/puzzle_wasm_bg.wasm",
-        window.location.origin,
-      );
+      const base = import.meta.env.BASE_URL || "/";
+      // Expose base to WASM before it runs so relative fetches work in dev and prod
+      (window as any).__BASE_URL = base.endsWith("/") ? base : base + "/";
+      const wasmUrl = `${base}pkg/puzzle_wasm_bg.wasm`;
+
+      // Load bridge module from public to avoid Vite processing of /public assets
+      async function ensureBridge(): Promise<void> {
+        if ((window as any).__puzzleWasmInit) return;
+        await new Promise<void>((resolve, reject) => {
+          const s = document.createElement("script");
+          s.type = "module";
+          s.src = `${base}wasm-bridge.js`;
+          s.onload = () => resolve();
+          s.onerror = () => reject(new Error("Failed to load wasm-bridge.js"));
+          document.head.appendChild(s);
+        });
+      }
+
+      await ensureBridge();
+      const init = (window as any).__puzzleWasmInit as (
+        u: string,
+      ) => Promise<any>;
       await init(wasmUrl);
     })();
   }, []);

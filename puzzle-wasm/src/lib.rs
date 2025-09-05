@@ -1514,21 +1514,25 @@ async fn fetch_and_load_puzzle(
     ctx: CanvasRenderingContext2d,
     name: &str,
 ) -> Result<(), JsValue> {
-    let url = format!("puzzle/{}.json", name);
-    let resp_value = wasm_bindgen_futures::JsFuture::from(window.fetch_with_str(&url)).await?;
-    let resp: web_sys::Response = resp_value.dyn_into()?;
-    let text = wasm_bindgen_futures::JsFuture::from(resp.text()?).await?;
-    let text = text.as_string().unwrap_or_default();
+    let text = fetch_text_with_fallbacks(
+        &window,
+        &[
+            &asset_url(&format!("puzzle/{}.json", name)),
+            &format!("/puzzle/{}.json", name),
+            &format!("puzzle/{}.json", name),
+        ],
+    )
+    .await
+    .unwrap_or_default();
     // Try parse as full Puzzle; fall back to counts+shapes
     let puzzle: Puzzle = if let Ok(p) = serde_json::from_str::<Puzzle>(&text) {
         p
     } else if let Ok(spec) = serde_json::from_str::<CountsSpec>(&text) {
         // Fetch shapes file if provided; else fallback to bundled shapes
         let shapes_text = if let Some(sf) = spec.shapes_file.clone() {
-            let resp2 = wasm_bindgen_futures::JsFuture::from(window.fetch_with_str(&sf)).await?;
-            let resp2: web_sys::Response = resp2.dyn_into()?;
-            let t2 = wasm_bindgen_futures::JsFuture::from(resp2.text()?).await?;
-            t2.as_string().unwrap_or_default()
+            fetch_text_with_fallbacks(&window, &[&asset_url(&sf), &sf])
+                .await
+                .unwrap_or_default()
         } else {
             include_str!("../../shapes.json").to_string()
         };
@@ -1555,6 +1559,55 @@ async fn fetch_and_load_puzzle(
         }
     });
     Ok(())
+}
+
+fn asset_url(path: &str) -> String {
+    // Use a base prefix provided by the host page via window.__BASE_URL if present,
+    // else default to "/". If the input is an absolute URL or already starts with
+    // the base, return as-is.
+    let p = path.trim();
+    if p.starts_with("http://") || p.starts_with("https://") || p.starts_with("data:") {
+        return p.to_string();
+    }
+    // Read base from window
+    let base = web_sys::window()
+        .and_then(|w| {
+            let v = js_sys::Reflect::get(&w, &JsValue::from_str("__BASE_URL")).ok()?;
+            v.as_string()
+        })
+        .unwrap_or_else(|| "/".to_string());
+    let base = if base.ends_with('/') {
+        base
+    } else {
+        format!("{}/", base)
+    };
+    let p = p.trim_start_matches('/');
+    format!("{}{}", base, p)
+}
+
+async fn fetch_text_with_fallbacks(window: &Window, urls: &[&str]) -> Option<String> {
+    for url in urls {
+        let resp_value =
+            match wasm_bindgen_futures::JsFuture::from(window.fetch_with_str(url)).await {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+        let resp: web_sys::Response = match resp_value.dyn_into() {
+            Ok(r) => r,
+            Err(_) => continue,
+        };
+        if !resp.ok() {
+            continue;
+        }
+        if let Ok(text_promise) = resp.text() {
+            if let Ok(text_js) = wasm_bindgen_futures::JsFuture::from(text_promise).await {
+                if let Some(s) = text_js.as_string() {
+                    return Some(s);
+                }
+            }
+        }
+    }
+    None
 }
 
 fn get_query_param(search: &str, key: &str) -> Option<String> {
