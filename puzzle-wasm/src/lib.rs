@@ -79,6 +79,8 @@ struct Piece {
     __geom: Option<Vec<Point>>, // for hit-testing
     #[serde(skip)]
     __color_idx: Option<usize>, // stable color assignment
+    #[serde(skip)]
+    __label_idx: Option<usize>, // stable numeric label (0-based)
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -434,23 +436,30 @@ fn draw(state: &mut State) {
             state.offset,
             &color,
         );
+        // Draw center number label
+        let (cx, cy) = to_screen(ctr, height, state.scale, state.offset);
+        let size = (4.5 * state.scale).clamp(10.0, 28.0);
+        state.ctx.set_font(&format!("bold {}px sans-serif", size));
+        state.ctx.set_text_align("center");
+        state.ctx.set_text_baseline("middle");
+        let num = p.__label_idx.unwrap_or(i) + 1;
+        // Outline for contrast
+        state.ctx.set_line_width((size / 5.0).clamp(2.0, 5.0));
+        set_stroke_style(&state.ctx, "#fff");
+        let _ = state.ctx.stroke_text(&num.to_string(), cx, cy);
+        set_fill_style(&state.ctx, "#111");
+        let _ = state.ctx.fill_text(&num.to_string(), cx, cy);
     }
     update_validation_dom(state);
 }
 
 fn assign_piece_colors(p: &mut Puzzle) {
-    // Build a stable ordering: group by type, then by original index (stable tie-breaker)
-    let mut order: Vec<(usize, String)> = p
-        .pieces
-        .iter()
-        .enumerate()
-        .map(|(i, pc)| (i, pc.type_.clone()))
-        .collect();
-    order.sort_by(|a, b| a.1.cmp(&b.1).then(a.0.cmp(&b.0)));
-    for (rank, (orig_idx, _)) in order.into_iter().enumerate() {
-        if let Some(pc) = p.pieces.get_mut(orig_idx) {
-            pc.__color_idx = Some(rank);
-        }
+    // Assign stable numeric labels based on original input order,
+    // and set colors to follow the same numbering (mod 8):
+    // 红, 橙, 黄, 绿, 青, 蓝, 紫, 粉
+    for (i, pc) in p.pieces.iter_mut().enumerate() {
+        pc.__label_idx = Some(i);
+        pc.__color_idx = Some(i);
     }
 }
 
@@ -526,16 +535,18 @@ fn update_validation_dom(state: &State) {
     };
 
     // Gather board geometry
-    let board_geom = state.data.board.as_ref().and_then(|b| board_to_geom(b));
+    let board_geom = state.data.board.as_ref().and_then(board_to_geom);
 
-    // Gather piece geoms
+    // Gather piece geoms with a stable label index (independent of current array order)
+    // Use per-piece __label_idx if present; otherwise fall back to loop index.
     let mut geoms: Vec<(usize, Vec<Point>)> = Vec::new();
     for (i, p) in state.data.pieces.iter().enumerate() {
+        let label_idx = p.__label_idx.unwrap_or(i);
         if let Some(g) = &p.__geom {
-            geoms.push((i, g.clone()));
+            geoms.push((label_idx, g.clone()));
         } else {
             let (g, _c) = piece_geom(p);
-            geoms.push((i, g));
+            geoms.push((label_idx, g));
         }
     }
 
@@ -546,8 +557,10 @@ fn update_validation_dom(state: &State) {
     for a in 0..geoms.len() {
         for b in (a + 1)..geoms.len() {
             if polygons_intersect(&geoms[a].1, &geoms[b].1) {
-                errors_en.push(format!("Piece {} overlaps piece {}", a + 1, b + 1));
-                errors_zh.push(format!("拼图 {} 与拼图 {} 重叠", a + 1, b + 1));
+                let la = geoms[a].0 + 1;
+                let lb = geoms[b].0 + 1;
+                errors_en.push(format!("Piece {} overlaps piece {}", la, lb));
+                errors_zh.push(format!("拼图 {} 与拼图 {} 重叠", la, lb));
             }
         }
     }
@@ -573,13 +586,14 @@ fn update_validation_dom(state: &State) {
         let fully_inside =
             |poly: &Vec<Point>| -> bool { poly.iter().all(|p| poly_contains_point(bg, *p)) };
 
-        for (idx, pg) in &geoms {
+        for (label_idx, pg) in &geoms {
+            let num = label_idx + 1;
             if edges_cross(pg) {
-                errors_en.push(format!("Piece {} overlaps the border", idx + 1));
-                errors_zh.push(format!("拼图 {} 与边框重叠", idx + 1));
+                errors_en.push(format!("Piece {} overlaps the border", num));
+                errors_zh.push(format!("拼图 {} 与边框重叠", num));
             } else if !fully_inside(pg) {
-                errors_en.push(format!("Piece {} is outside the border", idx + 1));
-                errors_zh.push(format!("拼图 {} 在边框外", idx + 1));
+                errors_en.push(format!("Piece {} is outside the border", num));
+                errors_zh.push(format!("拼图 {} 在边框外", num));
             }
         }
     }
@@ -596,18 +610,30 @@ fn update_validation_dom(state: &State) {
             html.push_str("</ul>");
             el.set_inner_html(&html);
         }
+    } else if errors_en.is_empty() {
+        el.set_inner_html("<div style=\"opacity:.7\">Success</div>");
     } else {
-        if errors_en.is_empty() {
-            el.set_inner_html("<div style=\"opacity:.7\">Success</div>");
-        } else {
-            let mut html = String::new();
-            html.push_str("<ul style=\"margin:0;padding-left:18px\">");
-            for e in errors_en {
-                html.push_str(&format!("<li>{}</li>", e));
-            }
-            html.push_str("</ul>");
-            el.set_inner_html(&html);
+        let mut html = String::new();
+        html.push_str("<ul style=\"margin:0;padding-left:18px\">");
+        for e in errors_en {
+            html.push_str(&format!("<li>{}</li>", e));
         }
+        html.push_str("</ul>");
+        el.set_inner_html(&html);
+    }
+}
+
+fn event_canvas_coords(e: &MouseEvent, cv: &HtmlCanvasElement) -> (f64, f64) {
+    // Convert client coordinates into canvas internal pixel coordinates
+    // so hit testing works even if CSS scales the canvas element.
+    // Fallback to offset if element cast fails.
+    if let Some(el) = cv.dyn_ref::<web_sys::Element>() {
+        let rect = el.get_bounding_client_rect();
+        let x = (e.client_x() as f64 - rect.left()) * (cv.width() as f64) / rect.width().max(1.0);
+        let y = (e.client_y() as f64 - rect.top()) * (cv.height() as f64) / rect.height().max(1.0);
+        (x, y)
+    } else {
+        (e.offset_x() as f64, e.offset_y() as f64)
     }
 }
 
@@ -886,110 +912,106 @@ fn attach_ui(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
         if let (Some(sl), Some(nb)) = (
             doc.get_element_by_id("fastSpeedSlider"),
             doc.get_element_by_id("fastSpeedNumber"),
+        ) && let (Ok(sl), Ok(nb)) = (
+            sl.dyn_into::<web_sys::HtmlInputElement>(),
+            nb.dyn_into::<web_sys::HtmlInputElement>(),
         ) {
-            if let (Ok(sl), Ok(nb)) = (
-                sl.dyn_into::<web_sys::HtmlInputElement>(),
-                nb.dyn_into::<web_sys::HtmlInputElement>(),
-            ) {
-                // Set initial values from state
-                let val = st.borrow().rot_speed_fast.round().clamp(1.0, 180.0) as i32;
-                sl.set_value(&val.to_string());
-                nb.set_value(&val.to_string());
+            // Set initial values from state
+            let val = st.borrow().rot_speed_fast.round().clamp(1.0, 180.0) as i32;
+            sl.set_value(&val.to_string());
+            nb.set_value(&val.to_string());
 
-                // Slider -> Number + State
-                let st1 = st.clone();
-                let nb1 = nb.clone();
-                let sl_read = sl.clone();
-                let oninput = Closure::<dyn FnMut()>::wrap(Box::new(move || {
-                    let mut s = st1.borrow_mut();
-                    if let Ok(v) = sl_read.value().parse::<i32>() {
-                        let v = v.clamp(1, 180) as f64;
-                        nb1.set_value(&((v as i32).to_string()));
-                        s.rot_speed_fast = v;
-                        if s.rot_vel != 0.0 && !s.slow_mode {
-                            let dir = if s.rot_vel > 0.0 { 1.0 } else { -1.0 };
-                            s.rot_vel = dir as f64 * s.rot_speed_fast;
-                        }
+            // Slider -> Number + State
+            let st1 = st.clone();
+            let nb1 = nb.clone();
+            let sl_read = sl.clone();
+            let oninput = Closure::<dyn FnMut()>::wrap(Box::new(move || {
+                let mut s = st1.borrow_mut();
+                if let Ok(v) = sl_read.value().parse::<i32>() {
+                    let v = v.clamp(1, 180) as f64;
+                    nb1.set_value(&((v as i32).to_string()));
+                    s.rot_speed_fast = v;
+                    if s.rot_vel != 0.0 && !s.slow_mode {
+                        let dir = if s.rot_vel > 0.0 { 1.0 } else { -1.0 };
+                        s.rot_vel = dir * s.rot_speed_fast;
                     }
-                }));
-                sl.set_oninput(Some(oninput.as_ref().unchecked_ref()));
-                oninput.forget();
+                }
+            }));
+            sl.set_oninput(Some(oninput.as_ref().unchecked_ref()));
+            oninput.forget();
 
-                // Number -> Slider + State
-                let st2 = st.clone();
-                let sl2 = sl.clone();
-                let nb_read = nb.clone();
-                let oninput2 = Closure::<dyn FnMut()>::wrap(Box::new(move || {
-                    let mut s = st2.borrow_mut();
-                    if let Ok(mut v) = nb_read.value().parse::<i32>() {
-                        v = v.clamp(1, 180);
-                        nb_read.set_value(&v.to_string());
-                        sl2.set_value(&v.to_string());
-                        s.rot_speed_fast = v as f64;
-                        if s.rot_vel != 0.0 && !s.slow_mode {
-                            let dir = if s.rot_vel > 0.0 { 1.0 } else { -1.0 };
-                            s.rot_vel = dir as f64 * s.rot_speed_fast;
-                        }
+            // Number -> Slider + State
+            let st2 = st.clone();
+            let sl2 = sl.clone();
+            let nb_read = nb.clone();
+            let oninput2 = Closure::<dyn FnMut()>::wrap(Box::new(move || {
+                let mut s = st2.borrow_mut();
+                if let Ok(mut v) = nb_read.value().parse::<i32>() {
+                    v = v.clamp(1, 180);
+                    nb_read.set_value(&v.to_string());
+                    sl2.set_value(&v.to_string());
+                    s.rot_speed_fast = v as f64;
+                    if s.rot_vel != 0.0 && !s.slow_mode {
+                        let dir = if s.rot_vel > 0.0 { 1.0 } else { -1.0 };
+                        s.rot_vel = dir * s.rot_speed_fast;
                     }
-                }));
-                nb.set_oninput(Some(oninput2.as_ref().unchecked_ref()));
-                oninput2.forget();
-            }
+                }
+            }));
+            nb.set_oninput(Some(oninput2.as_ref().unchecked_ref()));
+            oninput2.forget();
         }
 
         // Initialize and wire slow speed controls
         if let (Some(sl), Some(nb)) = (
             doc.get_element_by_id("slowSpeedSlider"),
             doc.get_element_by_id("slowSpeedNumber"),
+        ) && let (Ok(sl), Ok(nb)) = (
+            sl.dyn_into::<web_sys::HtmlInputElement>(),
+            nb.dyn_into::<web_sys::HtmlInputElement>(),
         ) {
-            if let (Ok(sl), Ok(nb)) = (
-                sl.dyn_into::<web_sys::HtmlInputElement>(),
-                nb.dyn_into::<web_sys::HtmlInputElement>(),
-            ) {
-                // Set initial values from state
-                let val = st.borrow().rot_speed_slow.round().clamp(1.0, 180.0) as i32;
-                sl.set_value(&val.to_string());
-                nb.set_value(&val.to_string());
+            // Set initial values from state
+            let val = st.borrow().rot_speed_slow.round().clamp(1.0, 180.0) as i32;
+            sl.set_value(&val.to_string());
+            nb.set_value(&val.to_string());
 
-                // Slider -> Number + State
-                let st1 = st.clone();
-                let nb1 = nb.clone();
-                let sl_read = sl.clone();
-                let oninput = Closure::<dyn FnMut()>::wrap(Box::new(move || {
-                    let mut s = st1.borrow_mut();
-                    if let Ok(v) = sl_read.value().parse::<i32>() {
-                        let v = v.clamp(1, 180) as f64;
-                        nb1.set_value(&((v as i32).to_string()));
-                        s.rot_speed_slow = v;
-                        if s.rot_vel != 0.0 && s.slow_mode {
-                            let dir = if s.rot_vel > 0.0 { 1.0 } else { -1.0 };
-                            s.rot_vel = dir as f64 * s.rot_speed_slow;
-                        }
+            // Slider -> Number + State
+            let st1 = st.clone();
+            let nb1 = nb.clone();
+            let sl_read = sl.clone();
+            let oninput = Closure::<dyn FnMut()>::wrap(Box::new(move || {
+                let mut s = st1.borrow_mut();
+                if let Ok(v) = sl_read.value().parse::<i32>() {
+                    let v = v.clamp(1, 180) as f64;
+                    nb1.set_value(&((v as i32).to_string()));
+                    s.rot_speed_slow = v;
+                    if s.rot_vel != 0.0 && s.slow_mode {
+                        let dir = if s.rot_vel > 0.0 { 1.0 } else { -1.0 };
+                        s.rot_vel = dir * s.rot_speed_slow;
                     }
-                }));
-                sl.set_oninput(Some(oninput.as_ref().unchecked_ref()));
-                oninput.forget();
+                }
+            }));
+            sl.set_oninput(Some(oninput.as_ref().unchecked_ref()));
+            oninput.forget();
 
-                // Number -> Slider + State
-                let st2 = st.clone();
-                let sl2 = sl.clone();
-                let nb_read = nb.clone();
-                let oninput2 = Closure::<dyn FnMut()>::wrap(Box::new(move || {
-                    let mut s = st2.borrow_mut();
-                    if let Ok(mut v) = nb_read.value().parse::<i32>() {
-                        v = v.clamp(1, 180);
-                        nb_read.set_value(&v.to_string());
-                        sl2.set_value(&v.to_string());
-                        s.rot_speed_slow = v as f64;
-                        if s.rot_vel != 0.0 && s.slow_mode {
-                            let dir = if s.rot_vel > 0.0 { 1.0 } else { -1.0 };
-                            s.rot_vel = dir as f64 * s.rot_speed_slow;
-                        }
+            // Number -> Slider + State
+            let st2 = st.clone();
+            let sl2 = sl.clone();
+            let nb_read = nb.clone();
+            let oninput2 = Closure::<dyn FnMut()>::wrap(Box::new(move || {
+                let mut s = st2.borrow_mut();
+                if let Ok(mut v) = nb_read.value().parse::<i32>() {
+                    v = v.clamp(1, 180);
+                    nb_read.set_value(&v.to_string());
+                    sl2.set_value(&v.to_string());
+                    s.rot_speed_slow = v as f64;
+                    if s.rot_vel != 0.0 && s.slow_mode {
+                        let dir = if s.rot_vel > 0.0 { 1.0 } else { -1.0 };
+                        s.rot_vel = dir * s.rot_speed_slow;
                     }
-                }));
-                nb.set_oninput(Some(oninput2.as_ref().unchecked_ref()));
-                oninput2.forget();
-            }
+                }
+            }));
+            nb.set_oninput(Some(oninput2.as_ref().unchecked_ref()));
+            oninput2.forget();
         }
     }
 
@@ -1010,7 +1032,7 @@ fn attach_ui(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
         let st = state.clone();
         let mousedown = Closure::<dyn FnMut(MouseEvent)>::wrap(Box::new(move |e: MouseEvent| {
             let mut s = st.borrow_mut();
-            let pt = (e.offset_x() as f64, e.offset_y() as f64);
+            let pt = event_canvas_coords(&e, &s.canvas);
             let h = s.canvas.height() as f64;
             // find topmost piece under cursor
             for i in (0..s.data.pieces.len()).rev() {
@@ -1041,10 +1063,8 @@ fn attach_ui(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
             let mut s = st.borrow_mut();
             if let Some(idx) = s.dragging_idx {
                 let h = s.canvas.height() as f64;
-                let pt = (
-                    (e.offset_x() as f64) - s.drag_off.0,
-                    (e.offset_y() as f64) - s.drag_off.1,
-                );
+                let raw = event_canvas_coords(&e, &s.canvas);
+                let pt = (raw.0 - s.drag_off.0, raw.1 - s.drag_off.1);
                 let gp = from_screen(pt.0, pt.1, h, s.scale, s.offset);
                 // move by center
                 if let Some(ctr) = s.data.pieces[idx].__ctr {
@@ -1676,12 +1696,11 @@ async fn fetch_text_with_fallbacks(window: &Window, urls: &[&str]) -> Option<Str
         if !resp.ok() {
             continue;
         }
-        if let Ok(text_promise) = resp.text() {
-            if let Ok(text_js) = wasm_bindgen_futures::JsFuture::from(text_promise).await {
-                if let Some(s) = text_js.as_string() {
-                    return Some(s);
-                }
-            }
+        if let Ok(text_promise) = resp.text()
+            && let Ok(text_js) = wasm_bindgen_futures::JsFuture::from(text_promise).await
+            && let Some(s) = text_js.as_string()
+        {
+            return Some(s);
         }
     }
     None
