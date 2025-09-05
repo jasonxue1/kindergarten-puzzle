@@ -6,7 +6,7 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use web_sys::{Document, Event, FileReader, HtmlInputElement, Window};
 
-use crate::{draw, build_puzzle_from_counts, log, CountsSpec, Puzzle, ShapesCatalog, State, assign_piece_colors, update_note_dom};
+use crate::{draw, build_puzzle_from_counts, log, CountsSpec, Puzzle, ShapesCatalog, State, assign_piece_colors, update_note_dom, update_status_dom};
 
 // Wires up the file input handler for loading JSON puzzle files.
 pub fn attach_file_input(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
@@ -47,6 +47,7 @@ pub fn attach_file_input(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
                         assign_piece_colors(&mut s.data);
                         s.initial_data = s.data.clone();
                         update_note_dom(&s);
+                        update_status_dom(&s);
                         draw(&mut s);
                     }
                 } else if let Ok(spec) = serde_json::from_str::<CountsSpec>(&text) {
@@ -78,6 +79,7 @@ pub fn attach_file_input(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
                                 assign_piece_colors(&mut s.data);
                                 s.initial_data = s.data.clone();
                                 update_note_dom(&s);
+                                update_status_dom(&s);
                                 draw(&mut s);
                             }
                             Err(e) => {

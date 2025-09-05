@@ -470,6 +470,35 @@ fn update_note_dom(state: &State) {
     }
 }
 
+fn update_status_dom(state: &State) {
+    if let Some(el) = state.document.get_element_by_id("status") {
+        if let Ok(el) = el.dyn_into::<HtmlElement>() {
+            let lock_en = if state.shift_down {
+                "Lock: Temporary"
+            } else if state.restrict_mode {
+                "Lock: Locked"
+            } else {
+                "Lock: Unlocked"
+            };
+            let lock_zh = if state.shift_down {
+                "锁定：临时锁定"
+            } else if state.restrict_mode {
+                "锁定：已锁定"
+            } else {
+                "锁定：未锁定"
+            };
+            let speed_en = if state.slow_mode { "Speed: Slow" } else { "Speed: Fast" };
+            let speed_zh = if state.slow_mode { "速度：慢" } else { "速度：快" };
+            let txt = if state.lang == "zh" {
+                format!("{}  |  {}", lock_zh, speed_zh)
+            } else {
+                format!("{}  |  {}", lock_en, speed_en)
+            };
+            el.set_inner_text(&txt);
+        }
+    }
+}
+
 fn draw_colored_polygon(
     ctx: &CanvasRenderingContext2d,
     canvas_h: f64,
@@ -696,6 +725,7 @@ fn attach_ui(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
             s.shift_down = false;
             s.scale = DEFAULT_MM2PX;
             s.offset = (0.0, 0.0);
+            update_status_dom(&s);
             draw(&mut s);
         }));
         btn.set_onclick(Some(onclick.as_ref().unchecked_ref()));
@@ -725,6 +755,7 @@ fn attach_ui(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
                 let v = sel.value();
                 s.lang = if v.to_lowercase().starts_with("zh") { "zh".to_string() } else { "en".to_string() };
                 update_note_dom(&s);
+                update_status_dom(&s);
             }
         }));
         sel.set_onchange(Some(onchange.as_ref().unchecked_ref()));
@@ -925,6 +956,7 @@ fn attach_ui(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
                             s.rot_vel = dir * new_speed;
                         }
                         log(if s.slow_mode { "Switched to slow mode" } else { "Switched to fast mode" });
+                        update_status_dom(&s);
                     }
                     "f" => {
                         p.flip = Some(!p.flip.unwrap_or(false));
@@ -934,10 +966,12 @@ fn attach_ui(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
                     "l" => {
                         s.restrict_mode = !s.restrict_mode;
                         log(if s.restrict_mode { "Restriction: ON (no overlaps with pieces/border)" } else { "Restriction: OFF" });
+                        update_status_dom(&s);
                     }
                     // track Shift press for temporary constraint
                     "shift" => {
                         s.shift_down = true;
+                        update_status_dom(&s);
                     }
                     _ => {}
                 }
@@ -959,6 +993,7 @@ fn attach_ui(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
             }
             if key == "shift" {
                 s.shift_down = false;
+                update_status_dom(&s);
             }
         }));
         state
@@ -1316,6 +1351,7 @@ pub fn start() -> Result<(), JsValue> {
             assign_piece_colors(&mut s.data);
             s.initial_data = s.data.clone();
             update_note_dom(&s);
+            update_status_dom(&s);
         }
     });
     attach_ui(state.clone())?;
@@ -1363,6 +1399,7 @@ async fn fetch_and_load_puzzle(
             assign_piece_colors(&mut s.data);
             s.initial_data = s.data.clone();
             update_note_dom(&s);
+            update_status_dom(&s);
             s.window = window.clone();
             s.document = document.clone();
             s.canvas = canvas.clone();
