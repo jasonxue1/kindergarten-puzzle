@@ -58,6 +58,35 @@
       html[data-theme="dark"] .toolbar {
         border-bottom-color: var(--ctp-mocha-surface0);
       }
+      .icon-btn {
+        display: inline-grid;
+        place-items: center;
+        width: 34px;
+        height: 34px;
+        border-radius: 8px;
+        border: 1px solid var(--ctp-latte-surface0);
+        background: transparent;
+        padding: 0;
+      }
+      html[data-theme="dark"] .icon-btn {
+        border-color: var(--ctp-mocha-surface0);
+      }
+      .icon-btn:hover {
+        background: color-mix(in oklab, currentColor, transparent 92%);
+      }
+      .icon-btn svg {
+        fill: currentColor;
+      }
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 1px, 1px);
+        border: 0;
+      }
       .status {
         padding: 6px 12px;
         color: var(--ctp-latte-subtext0);
