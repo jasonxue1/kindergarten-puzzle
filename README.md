@@ -49,6 +49,15 @@ Open <http://localhost:5173/>
   counts+board).
 - Button: 保存JSON — downloads the current state as `puzzle.json`.
 
+Coloring
+
+- Pieces use a fixed 16‑color palette with easily describable hues
+  (red, orange, gold, green, blue, purple, pink, etc.).
+- Colors are assigned deterministically by first grouping all pieces by type,
+  then assigning colors by the grouped order with `index % 16`.
+- Color for each piece is stable during interaction (drag/rotate) and does not
+  change when bringing pieces to front.
+
 ## JSON Formats
 
 Two supported inputs:

@@ -77,6 +77,8 @@ struct Piece {
     __ctr: Option<Point>,
     #[serde(skip)]
     __geom: Option<Vec<Point>>, // for hit-testing
+    #[serde(skip)]
+    __color_idx: Option<usize>, // stable color assignment
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -412,7 +414,8 @@ fn draw(state: &mut State) {
         let (geom, ctr) = piece_geom(p);
         p.__geom = Some(geom.clone());
         p.__ctr = Some(ctr);
-        let color = puzzle_core::piece_color(i);
+        let color_idx = p.__color_idx.unwrap_or(i);
+        let color = puzzle_core::piece_color(color_idx);
         draw_colored_polygon(
             &state.ctx,
             height,
@@ -422,6 +425,22 @@ fn draw(state: &mut State) {
             state.offset,
             &color,
         );
+    }
+}
+
+fn assign_piece_colors(p: &mut Puzzle) {
+    // Build a stable ordering: group by type, then by original index (stable tie-breaker)
+    let mut order: Vec<(usize, String)> = p
+        .pieces
+        .iter()
+        .enumerate()
+        .map(|(i, pc)| (i, pc.type_.clone()))
+        .collect();
+    order.sort_by(|a, b| a.1.cmp(&b.1).then(a.0.cmp(&b.0)));
+    for (rank, (orig_idx, _)) in order.into_iter().enumerate() {
+        if let Some(pc) = p.pieces.get_mut(orig_idx) {
+            pc.__color_idx = Some(rank);
+        }
     }
 }
 
@@ -1226,6 +1245,13 @@ pub fn start() -> Result<(), JsValue> {
     }));
 
     STATE.with(|st| st.replace(Some(state.clone())));
+    // Assign stable colors before first draw
+    STATE.with(|st| {
+        if let Some(st_rc) = st.borrow().as_ref() {
+            let mut s = st_rc.borrow_mut();
+            assign_piece_colors(&mut s.data);
+        }
+    });
     attach_ui(state.clone())?;
     start_animation(state.clone());
     draw(&mut state.borrow_mut());
@@ -1268,6 +1294,7 @@ async fn fetch_and_load_puzzle(
         if let Some(st_rc) = st.borrow().as_ref() {
             let mut s = st_rc.borrow_mut();
             s.data = puzzle;
+            assign_piece_colors(&mut s.data);
             s.window = window.clone();
             s.document = document.clone();
             s.canvas = canvas.clone();
