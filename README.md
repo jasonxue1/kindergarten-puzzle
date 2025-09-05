@@ -54,11 +54,10 @@ Notes and Tutor
 
 Coloring
 
-- Pieces use a fixed 16‑color palette with easily describable hues
-  (red, orange, gold, green, blue, purple, pink, etc.).
+- Pieces use a fixed 8‑color palette in this order: red, orange, yellow, green, cyan, blue, purple, pink.
 - Colors are assigned deterministically by first grouping all pieces by type,
-  then assigning colors by the grouped order with `index % 16`.
-- Color for each piece is stable during interaction (drag/rotate) and does not
+  then assigning colors by the grouped order with `index % 8`.
+- Each piece’s color is stable during interaction (drag/rotate) and doesn’t
   change when bringing pieces to front.
 
 ## JSON Formats

@@ -1,23 +1,16 @@
 pub fn piece_color(i: usize) -> String {
-    // Fixed 16-color categorical palette with easily describable hues.
-    // Colors are stable and cycle by index%16.
-    const PALETTE: [&str; 16] = [
-        "red",           // 0
-        "orangered",     // 1
-        "orange",        // 2
-        "gold",          // 3
-        "yellowgreen",   // 4
-        "green",         // 5
-        "mediumseagreen",// 6
-        "teal",          // 7
-        "deepskyblue",   // 8
-        "dodgerblue",    // 9
-        "blueviolet",    // 10
-        "purple",        // 11
-        "fuchsia",       // 12
-        "hotpink",       // 13
-        "peru",          // 14
-        "slategray",     // 15
+    // Fixed 8-color palette in the exact order: red, orange, yellow,
+    // green, cyan, blue, purple, pink.
+    // Colors are stable and cycle by index%8.
+    const PALETTE: [&str; 8] = [
+        "red",     // 红
+        "orange",  // 橙
+        "yellow",  // 黄
+        "green",   // 绿
+        "cyan",    // 青
+        "blue",    // 蓝
+        "purple",  // 紫
+        "pink",    // 粉
     ];
     PALETTE[i % PALETTE.len()].to_string()
 }
