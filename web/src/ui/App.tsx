@@ -162,6 +162,49 @@ const App: React.FC = () => {
                 auto: strings[lang].themeAuto,
               }}
             />
+            <div style={{ width: 10 }} aria-hidden />
+            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+              <label htmlFor="fastSpeedSlider">{t.speedFast}</label>
+              <input
+                id="fastSpeedSlider"
+                type="range"
+                min={1}
+                max={180}
+                step={1}
+                defaultValue={180}
+                style={{ width: 120 }}
+              />
+              <input
+                id="fastSpeedNumber"
+                type="number"
+                min={1}
+                max={180}
+                step={1}
+                defaultValue={180}
+                style={{ width: 64 }}
+              />
+            </div>
+            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+              <label htmlFor="slowSpeedSlider">{t.speedSlow}</label>
+              <input
+                id="slowSpeedSlider"
+                type="range"
+                min={1}
+                max={180}
+                step={1}
+                defaultValue={30}
+                style={{ width: 120 }}
+              />
+              <input
+                id="slowSpeedNumber"
+                type="number"
+                min={1}
+                max={180}
+                step={1}
+                defaultValue={30}
+                style={{ width: 64 }}
+              />
+            </div>
           </div>
           <span id="help" style={{ display: "none" }} />
         </div>

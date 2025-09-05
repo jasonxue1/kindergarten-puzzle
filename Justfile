@@ -49,27 +49,16 @@ png-id id out="out.png" px_per_mm="6":
 
 # Format all code and content
 fmt:
-    # 1) Rust
     cargo fmt --all
-    # 2) TOML (Cargo.toml, etc.)
     taplo format
-    # 3) Web assets (HTML/JS/CSS/JSON/YML) via prettierd
     prettier --write .
-    # 4) Markdown via mdsf (already in PATH)
     mdsf format .
-    # 5) Nix files via alejandra
     alejandra -q .
 
 # Lint sources
 lint:
-    # 1) TOML lint
     taplo check
-    # 2) Rust lint
-    cargo clippy --workspace --all-targets --all-features -- -D warnings
-    # 3) Rust type-check
     cargo check --workspace
-    # 4) Markdown lint (mado.toml)
+    cargo clippy --workspace --all-targets --all-features -- -D warnings
     mado check
-    # Lint Nix code: report unused expressions/bindings
     deadnix --fail .
-    # Lint Nix via nixd (LSP). This target verifies availability.

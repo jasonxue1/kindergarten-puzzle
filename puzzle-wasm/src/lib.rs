@@ -781,6 +781,120 @@ fn attach_ui(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
         onchange.forget();
     }
 
+    // Speed controls (fast/slow) with slider + number, kept in sync
+    {
+        let st = state.clone();
+        // Initialize and wire fast speed controls
+        if let (Some(sl), Some(nb)) = (
+            doc.get_element_by_id("fastSpeedSlider"),
+            doc.get_element_by_id("fastSpeedNumber"),
+        ) {
+            if let (Ok(sl), Ok(nb)) = (
+                sl.dyn_into::<web_sys::HtmlInputElement>(),
+                nb.dyn_into::<web_sys::HtmlInputElement>(),
+            ) {
+                // Set initial values from state
+                let val = st.borrow().rot_speed_fast.round().clamp(1.0, 180.0) as i32;
+                sl.set_value(&val.to_string());
+                nb.set_value(&val.to_string());
+
+                // Slider -> Number + State
+                let st1 = st.clone();
+                let nb1 = nb.clone();
+                let sl_read = sl.clone();
+                let oninput = Closure::<dyn FnMut()>::wrap(Box::new(move || {
+                    let mut s = st1.borrow_mut();
+                    if let Ok(v) = sl_read.value().parse::<i32>() {
+                        let v = v.clamp(1, 180) as f64;
+                        nb1.set_value(&((v as i32).to_string()));
+                        s.rot_speed_fast = v;
+                        if s.rot_vel != 0.0 && !s.slow_mode {
+                            let dir = if s.rot_vel > 0.0 { 1.0 } else { -1.0 };
+                            s.rot_vel = dir as f64 * s.rot_speed_fast;
+                        }
+                    }
+                }));
+                sl.set_oninput(Some(oninput.as_ref().unchecked_ref()));
+                oninput.forget();
+
+                // Number -> Slider + State
+                let st2 = st.clone();
+                let sl2 = sl.clone();
+                let nb_read = nb.clone();
+                let oninput2 = Closure::<dyn FnMut()>::wrap(Box::new(move || {
+                    let mut s = st2.borrow_mut();
+                    if let Ok(mut v) = nb_read.value().parse::<i32>() {
+                        v = v.clamp(1, 180);
+                        nb_read.set_value(&v.to_string());
+                        sl2.set_value(&v.to_string());
+                        s.rot_speed_fast = v as f64;
+                        if s.rot_vel != 0.0 && !s.slow_mode {
+                            let dir = if s.rot_vel > 0.0 { 1.0 } else { -1.0 };
+                            s.rot_vel = dir as f64 * s.rot_speed_fast;
+                        }
+                    }
+                }));
+                nb.set_oninput(Some(oninput2.as_ref().unchecked_ref()));
+                oninput2.forget();
+            }
+        }
+
+        // Initialize and wire slow speed controls
+        if let (Some(sl), Some(nb)) = (
+            doc.get_element_by_id("slowSpeedSlider"),
+            doc.get_element_by_id("slowSpeedNumber"),
+        ) {
+            if let (Ok(sl), Ok(nb)) = (
+                sl.dyn_into::<web_sys::HtmlInputElement>(),
+                nb.dyn_into::<web_sys::HtmlInputElement>(),
+            ) {
+                // Set initial values from state
+                let val = st.borrow().rot_speed_slow.round().clamp(1.0, 180.0) as i32;
+                sl.set_value(&val.to_string());
+                nb.set_value(&val.to_string());
+
+                // Slider -> Number + State
+                let st1 = st.clone();
+                let nb1 = nb.clone();
+                let sl_read = sl.clone();
+                let oninput = Closure::<dyn FnMut()>::wrap(Box::new(move || {
+                    let mut s = st1.borrow_mut();
+                    if let Ok(v) = sl_read.value().parse::<i32>() {
+                        let v = v.clamp(1, 180) as f64;
+                        nb1.set_value(&((v as i32).to_string()));
+                        s.rot_speed_slow = v;
+                        if s.rot_vel != 0.0 && s.slow_mode {
+                            let dir = if s.rot_vel > 0.0 { 1.0 } else { -1.0 };
+                            s.rot_vel = dir as f64 * s.rot_speed_slow;
+                        }
+                    }
+                }));
+                sl.set_oninput(Some(oninput.as_ref().unchecked_ref()));
+                oninput.forget();
+
+                // Number -> Slider + State
+                let st2 = st.clone();
+                let sl2 = sl.clone();
+                let nb_read = nb.clone();
+                let oninput2 = Closure::<dyn FnMut()>::wrap(Box::new(move || {
+                    let mut s = st2.borrow_mut();
+                    if let Ok(mut v) = nb_read.value().parse::<i32>() {
+                        v = v.clamp(1, 180);
+                        nb_read.set_value(&v.to_string());
+                        sl2.set_value(&v.to_string());
+                        s.rot_speed_slow = v as f64;
+                        if s.rot_vel != 0.0 && s.slow_mode {
+                            let dir = if s.rot_vel > 0.0 { 1.0 } else { -1.0 };
+                            s.rot_vel = dir as f64 * s.rot_speed_slow;
+                        }
+                    }
+                }));
+                nb.set_oninput(Some(oninput2.as_ref().unchecked_ref()));
+                oninput2.forget();
+            }
+        }
+    }
+
     // Save JSON
     if let Some(btn) = doc.get_element_by_id("saveJson") {
         let btn: HtmlElement = btn.dyn_into().unwrap();
