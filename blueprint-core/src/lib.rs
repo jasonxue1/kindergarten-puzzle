@@ -828,8 +828,15 @@ pub fn build_blueprint_svg(
             let mut lines: Vec<String> = Vec::new();
             if let Some(ls) = &b.label_lines {
                 lines.extend(ls.iter().cloned());
-            } else if let Some(lbl) = &b.label {
-                lines.push(lbl.clone());
+            } else {
+                if let Some(lbl) = &b.label {
+                    lines.push(lbl.clone());
+                }
+                if let Some(pts) = &b.points {
+                    for p in pts {
+                        lines.push(format!("({},{})", fmt_mm(p[0]), fmt_mm(p[1])));
+                    }
+                }
             }
             let base_y_px = mm2px(total_h_mm - (cursor_y_mm + h / 2.0));
             let line_gap_px: f64 = 34.0;

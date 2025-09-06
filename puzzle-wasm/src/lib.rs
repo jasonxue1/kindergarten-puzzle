@@ -246,6 +246,17 @@ fn from_screen(x: f64, y: f64, canvas_h: f64, scale: f64, offset: (f64, f64)) ->
     }
 }
 
+fn fmt_mm(v: f64) -> String {
+    if (v - v.round()).abs() < 1e-6 {
+        format!("{:.0}", v)
+    } else {
+        format!("{:.3}", v)
+            .trim_end_matches('0')
+            .trim_end_matches('.')
+            .to_string()
+    }
+}
+
 use crate::canvas::{set_fill_style, set_stroke_style};
 
 fn rotate_point(p: Point, c: Point, ang: f64, flip: bool) -> Point {
@@ -610,20 +621,46 @@ fn update_note_dom(state: &State) {
             Ok(e) => e,
             Err(_) => return,
         };
-        let mut txt = String::new();
         let lang = state.lang.as_str();
+        let mut lines: Vec<String> = Vec::new();
+        if let Some(b) = &state.data.board {
+            if let Some(ls) = &b.label_lines {
+                lines.extend(ls.iter().cloned());
+            } else {
+                let lbl = if lang == "zh" {
+                    b.label_zh.clone().or(b.label.clone())
+                } else {
+                    b.label_en.clone().or(b.label.clone())
+                };
+                if let Some(l) = lbl {
+                    lines.push(l);
+                }
+                if let Some(pts) = &b.points {
+                    for p in pts {
+                        lines.push(format!("({},{})", fmt_mm(p[0]), fmt_mm(p[1])));
+                    }
+                }
+            }
+        }
+        let mut note_txt = String::new();
         if lang == "zh" {
             if let Some(n) = &state.data.note_zh {
-                txt = n.clone();
+                note_txt = n.clone();
             } else if let Some(n) = &state.data.note_en {
-                txt = n.clone();
+                note_txt = n.clone();
             }
         } else if let Some(n) = &state.data.note_en {
-            txt = n.clone();
+            note_txt = n.clone();
         } else if let Some(n) = &state.data.note_zh {
-            txt = n.clone();
+            note_txt = n.clone();
         }
-        el.set_inner_text(&txt);
+        if !note_txt.is_empty() {
+            if !lines.is_empty() {
+                lines.push(String::new());
+            }
+            lines.push(note_txt);
+        }
+        el.set_inner_text(&lines.join("\n"));
     }
 }
 
