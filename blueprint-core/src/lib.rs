@@ -767,20 +767,20 @@ pub fn build_blueprint_svg(
         let (minx, miny, _maxx, maxy) = board_bounds.unwrap();
         let h = maxy - miny;
         // Board label left column
-        if let Some(b) = &p.board {
-            if let Some(lbl) = if is_en() {
+        if let Some(b) = &p.board
+            && let Some(lbl) = if is_en() {
                 b.label_en.clone().or(b.label.clone())
             } else {
                 b.label_zh.clone().or(b.label.clone())
-            } {
-                let ly = mm2px(total_h_mm - (cursor_y_mm + h / 2.0));
-                s.push_str(&format!(
-                    "<text x=\"{:.2}\" y=\"{:.2}\" fill=\"#333\" font-size=\"30\">{}</text>\n",
-                    mm2px(pad_mm + 6.0),
-                    ly,
-                    svg_escape(&lbl)
-                ));
             }
+        {
+            let ly = mm2px(total_h_mm - (cursor_y_mm + h / 2.0));
+            s.push_str(&format!(
+                "<text x=\"{:.2}\" y=\"{:.2}\" fill=\"#333\" font-size=\"30\">{}</text>\n",
+                mm2px(pad_mm + 6.0),
+                ly,
+                svg_escape(&lbl)
+            ));
         }
         let x_mm = x_sep2_mm + 2.0;
         let g = translate_geoms(&board_geom, -minx + x_mm, -miny + cursor_y_mm);

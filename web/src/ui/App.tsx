@@ -31,6 +31,17 @@ const App: React.FC = () => {
   >([]);
   const [showTutorial, setShowTutorial] = useState(false);
 
+  const syncLang = () => {
+    const sel = document.getElementById("langSel") as HTMLSelectElement | null;
+    if (sel) {
+      if (sel.value !== lang) sel.value = lang;
+      sel.dispatchEvent(new Event("change"));
+    }
+    try {
+      localStorage.setItem("lang", lang);
+    } catch {}
+  };
+
   useEffect(() => {
     // Initialize the existing WASM app which expects specific element IDs present in the DOM.
     (async () => {
@@ -65,6 +76,7 @@ const App: React.FC = () => {
         if (loading && loading.parentElement)
           loading.parentElement.removeChild(loading);
         setReady(true);
+        syncLang();
       } catch (err) {
         const el = document.getElementById("loadingText");
         if (el) {
@@ -86,14 +98,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     // Keep the legacy Rust UI in sync: set value on #langSel and fire change
-    const sel = document.getElementById("langSel") as HTMLSelectElement | null;
-    if (sel) {
-      if (sel.value !== lang) sel.value = lang;
-      sel.dispatchEvent(new Event("change"));
-    }
-    try {
-      localStorage.setItem("lang", lang);
-    } catch {}
+    syncLang();
   }, [lang]);
 
   // Load chooser list when no ?p param
