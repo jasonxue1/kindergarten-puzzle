@@ -13,6 +13,8 @@ use web_sys::{
     MouseEvent, Url, Window,
 };
 
+use blueprint_core::PolygonPoint;
+
 use earcutr::earcut;
 use geo_types::Coord as GeoCoord;
 use polyline as polyline_codec;
@@ -74,7 +76,7 @@ struct Board {
     r: Option<f64>,
     cut_corner: Option<String>,
     points: Option<Vec<[f64; 2]>>,
-    polygons: Option<Vec<Vec<[f64; 2]>>>,
+    polygons: Option<Vec<Vec<PolygonPoint>>>,
     // Optional labels for export (bilingual support)
     label: Option<String>,
     label_en: Option<String>,
@@ -1251,6 +1253,76 @@ fn rapier_allowed_delta(
     locked_slide_delta_rapier(state, moving_idx, dx, dy)
 }
 
+fn normalize(p: Point) -> Point {
+    let len = (p.x * p.x + p.y * p.y).sqrt();
+    if len == 0.0 {
+        Point { x: 0.0, y: 0.0 }
+    } else {
+        Point { x: p.x / len, y: p.y / len }
+    }
+}
+
+fn poly_to_points(poly: &[PolygonPoint]) -> Vec<Point> {
+    let mut out: Vec<Point> = Vec::new();
+    let n = poly.len();
+    let mut i = 0;
+    while i < n {
+        match &poly[i] {
+            PolygonPoint::Point([x, y]) => {
+                out.push(Point { x: *x, y: *y });
+                i += 1;
+            }
+            PolygonPoint::Rounded([x, y, r]) => {
+                if out.is_empty() || i + 1 >= n {
+                    i += 1;
+                    continue;
+                }
+                let prev = *out.last().unwrap();
+                let next_xy = match &poly[i + 1] {
+                    PolygonPoint::Point([nx, ny]) => Point { x: *nx, y: *ny },
+                    PolygonPoint::Rounded([nx, ny, _]) => Point { x: *nx, y: *ny },
+                };
+                let corner = Point { x: *x, y: *y };
+                let radius = *r;
+                let v1 = normalize(Point {
+                    x: prev.x - corner.x,
+                    y: prev.y - corner.y,
+                });
+                let v2 = normalize(Point {
+                    x: next_xy.x - corner.x,
+                    y: next_xy.y - corner.y,
+                });
+                let start = Point {
+                    x: corner.x + v1.x * radius,
+                    y: corner.y + v1.y * radius,
+                };
+                let end = Point {
+                    x: corner.x + v2.x * radius,
+                    y: corner.y + v2.y * radius,
+                };
+                out.push(start);
+                let center = Point {
+                    x: corner.x + (v1.x + v2.x) * radius,
+                    y: corner.y + (v1.y + v2.y) * radius,
+                };
+                let start_ang = (start.y - center.y).atan2(start.x - center.x);
+                let end_ang = (end.y - center.y).atan2(end.x - center.x);
+                let steps = 24;
+                for j in 1..=steps {
+                    let t = j as f64 / steps as f64;
+                    let ang = start_ang + (end_ang - start_ang) * t;
+                    out.push(Point {
+                        x: center.x + radius * ang.cos(),
+                        y: center.y + radius * ang.sin(),
+                    });
+                }
+                i += 1;
+            }
+        }
+    }
+    out
+}
+
 fn board_to_geom(board: &Board) -> Option<Vec<Vec<Point>>> {
     match board.type_.as_deref() {
         Some("rect_with_quarter_round_cut") => {
@@ -1300,14 +1372,7 @@ fn board_to_geom(board: &Board) -> Option<Vec<Vec<Point>>> {
         }
         Some("polygon") => {
             if let Some(polys) = &board.polygons {
-                let geoms = polys
-                    .iter()
-                    .map(|poly| {
-                        poly.iter()
-                            .map(|v| Point { x: v[0], y: v[1] })
-                            .collect::<Vec<_>>()
-                    })
-                    .collect::<Vec<_>>();
+                let geoms = polys.iter().map(|poly| poly_to_points(poly)).collect::<Vec<_>>();
                 if geoms.is_empty() { None } else { Some(geoms) }
             } else {
                 let pts = board
@@ -1459,8 +1524,7 @@ fn board_outer_geom(board: &Board, ring: f64) -> Option<Vec<Vec<Point>>> {
             if let Some(polys) = &board.polygons {
                 let mut outs: Vec<Vec<Point>> = Vec::new();
                 for poly in polys {
-                    let inner: Vec<Point> =
-                        poly.iter().map(|v| Point { x: v[0], y: v[1] }).collect();
+                    let inner = poly_to_points(poly);
                     if inner.len() >= 3 {
                         outs.push(polygon_offset_rounded(&inner, ring, 8));
                     }
