@@ -1,11 +1,16 @@
 {
   "units": "mm",
   "board": {
-    "type": "rect_with_quarter_round_cut",
-    "w": 113,
-    "h": 123,
-    "cut_corner": "topright",
-    "r": 15,
+    "type": "polygon",
+    "polygons": [
+      [
+        [0, 0],
+        [113, 0],
+        [113, 108],
+        [113, 123, 15],
+        [0, 123]
+      ]
+    ],
     "label_zh": "外框 113×123mm（R15）",
     "label_en": "Board 113×123 mm (R15)"
   },
