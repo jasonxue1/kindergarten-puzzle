@@ -2,7 +2,7 @@ name: Build and Deploy Pages
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   pull_request:
 
 permissions:
@@ -17,6 +17,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      BASE_PATH: ${{ github.ref_name == 'dev' && '/dev/' || '/' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -54,23 +56,17 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 9
 
-      # Now that pnpm is installed, enable pnpm caching
-      - name: Setup Node.js cache (pnpm)
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-          cache-dependency-path: web/pnpm-lock.yaml
-
       - name: Install web dependencies
         working-directory: web
-        run: pnpm install --frozen-lockfile=false
+        run: pnpm install --frozen-lockfile
 
       - name: Build modern web UI (Vite)
         working-directory: web
@@ -79,14 +75,19 @@ jobs:
       - name: Prepare site for Pages
         run: |
           rm -rf dist
-          mkdir -p dist
+          if [ "$BASE_PATH" = "/dev/" ]; then
+            deploy_dir="dist/dev"
+          else
+            deploy_dir="dist"
+          fi
+          mkdir -p "$deploy_dir"
           # Copy Vite build
-          cp -r web/dist/* dist/
+          cp -r web/dist/* "$deploy_dir/"
           # Include WASM pkg and static data
-          cp -r pkg dist/
-          cp -r puzzle dist/
-          cp shapes.json dist/
-          cp puzzles.json dist/
+          cp -r pkg "$deploy_dir/"
+          cp -r puzzle "$deploy_dir/"
+          cp shapes.json "$deploy_dir/"
+          cp puzzles.json "$deploy_dir/"
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
@@ -96,7 +97,7 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'dev')
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
