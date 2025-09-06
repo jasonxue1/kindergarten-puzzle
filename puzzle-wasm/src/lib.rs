@@ -1355,131 +1355,31 @@ fn board_outer_geom(board: &Board, ring: f64) -> Option<Vec<Vec<Point>>> {
     }
 }
 
-fn polygon_area(poly: &[Point]) -> f64 {
-    let n = poly.len();
-    if n < 3 {
-        return 0.0;
-    }
-    let mut a = 0.0;
-    for i in 0..n {
-        let p = poly[i];
-        let q = poly[(i + 1) % n];
-        a += p.x * q.y - p.y * q.x;
-    }
-    0.5 * a
-}
+fn polygon_offset_rounded(inner: &[Point], r: f64, _arc_samples: usize) -> Vec<Point> {
+    use geo::algorithm::buffer::Buffer;
+    use geo::{Coord, LineString, Polygon};
 
-fn line_intersection(a1: Point, a2: Point, b1: Point, b2: Point) -> Option<Point> {
-    let x1 = a1.x;
-    let y1 = a1.y;
-    let x2 = a2.x;
-    let y2 = a2.y;
-    let x3 = b1.x;
-    let y3 = b1.y;
-    let x4 = b2.x;
-    let y4 = b2.y;
-    let den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
-    if den.abs() < 1e-9 {
-        return None;
-    }
-    let px = ((x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)) / den;
-    let py = ((x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4)) / den;
-    Some(Point { x: px, y: py })
-}
-
-fn polygon_offset_rounded(inner: &[Point], r: f64, arc_samples: usize) -> Vec<Point> {
-    let n = inner.len();
     let r = r.max(0.0);
-    if n < 2 || r <= 0.0 {
+    if inner.len() < 3 || r <= 0.0 {
         return inner.to_vec();
     }
-    // Determine orientation: >0 => CCW, <0 => CW
-    let ccw = polygon_area(inner) > 0.0;
-    // Edge outward normals
-    let mut normals: Vec<(f64, f64)> = Vec::with_capacity(n);
-    for i in 0..n {
-        let p = inner[i];
-        let q = inner[(i + 1) % n];
-        let ex = q.x - p.x;
-        let ey = q.y - p.y;
-        let len = (ex * ex + ey * ey).sqrt().max(1e-9);
-        // For CCW, outward is right normal; for CW, outward is left normal
-        let (nx, ny) = if ccw {
-            (ey / len, -ex / len)
-        } else {
-            (-ey / len, ex / len)
-        };
-        normals.push((nx, ny));
-    }
-    // Build offset lines and their intersections (miter points)
-    let mut miters: Vec<Point> = Vec::with_capacity(n);
-    for i in 0..n {
-        let prev = (i + n - 1) % n;
-        let p0 = inner[prev];
-        let p1 = inner[i];
-        let p2 = inner[(i + 1) % n];
-        let (nx0, ny0) = normals[prev];
-        let (nx1, ny1) = normals[i];
-        let a1 = Point {
-            x: p0.x + nx0 * r,
-            y: p0.y + ny0 * r,
-        };
-        let a2 = Point {
-            x: p1.x + nx0 * r,
-            y: p1.y + ny0 * r,
-        };
-        let b1 = Point {
-            x: p1.x + nx1 * r,
-            y: p1.y + ny1 * r,
-        };
-        let b2 = Point {
-            x: p2.x + nx1 * r,
-            y: p2.y + ny1 * r,
-        };
-        let inter = line_intersection(a1, a2, b1, b2).unwrap_or(b1);
-        miters.push(inter);
-    }
-    // Build rounded outer by inserting arc points around each vertex from normal(prev) to normal(curr)
-    let mut out: Vec<Point> = Vec::new();
-    for i in 0..n {
-        let prev = (i + n - 1) % n;
-        // arc center at original vertex
-        let c = inner[i];
-        let (nx0, ny0) = normals[prev];
-        let (nx1, ny1) = normals[i];
-        let a0 = ny0.atan2(nx0); // angle of outward normal (prev edge)
-        let a1 = ny1.atan2(nx1); // angle of outward normal (curr edge)
-        // Sweep direction: go around outside following polygon order
-        let mut delta = a1 - a0;
-        // Normalize to (-pi, pi]
-        while delta <= -std::f64::consts::PI {
-            delta += 2.0 * std::f64::consts::PI;
+
+    let coords: Vec<Coord> = inner.iter().map(|p| Coord { x: p.x, y: p.y }).collect();
+    let poly = Polygon::new(LineString::from(coords), vec![]);
+    let mp = poly.buffer(r);
+    let poly = mp.0.into_iter().next().unwrap();
+    let mut out: Vec<Point> = poly
+        .exterior()
+        .0
+        .iter()
+        .map(|c| Point { x: c.x, y: c.y })
+        .collect();
+    if out.len() > 1 {
+        let first = out.first().unwrap();
+        let last = out.last().unwrap();
+        if (first.x - last.x).abs() < 1e-9 && (first.y - last.y).abs() < 1e-9 {
+            out.pop();
         }
-        while delta > std::f64::consts::PI {
-            delta -= 2.0 * std::f64::consts::PI;
-        }
-        if ccw {
-            // For CCW polygon, outside is to the right; we want CW arc => negative sweep
-            if delta > 0.0 {
-                delta -= 2.0 * std::f64::consts::PI;
-            }
-        } else {
-            // For CW polygon, outside is to the left; we want CCW arc => positive sweep
-            if delta < 0.0 {
-                delta += 2.0 * std::f64::consts::PI;
-            }
-        }
-        let steps = arc_samples.max(1);
-        for s in 0..=steps {
-            let t = s as f64 / (steps as f64);
-            let ang = a0 + delta * t;
-            out.push(Point {
-                x: c.x + r * ang.cos(),
-                y: c.y + r * ang.sin(),
-            });
-        }
-        // connect via miter point to stabilize long edges
-        out.push(miters[i]);
     }
     out
 }
@@ -2540,15 +2440,15 @@ fn update_viewport(state: &mut State) {
     let mut maxx = f64::NEG_INFINITY;
     let mut maxy = f64::NEG_INFINITY;
 
-    if let Some(b) = &state.data.board
-        && let Some(geoms) = board_to_geom(b)
-    {
-        for g in geoms {
-            for p in g {
-                minx = minx.min(p.x);
-                maxx = maxx.max(p.x);
-                miny = miny.min(p.y);
-                maxy = maxy.max(p.y);
+    if let Some(b) = &state.data.board {
+        if let Some(geoms) = board_outer_geom(b, RING_WIDTH_MM).or_else(|| board_to_geom(b)) {
+            for g in geoms {
+                for p in g {
+                    minx = minx.min(p.x);
+                    maxx = maxx.max(p.x);
+                    miny = miny.min(p.y);
+                    maxy = maxy.max(p.y);
+                }
             }
         }
     }
@@ -2563,6 +2463,15 @@ fn update_viewport(state: &mut State) {
         }
     }
     let have_bounds = maxx.is_finite() && maxy.is_finite();
+
+    if have_bounds {
+        // Ensure some extra space so the border is not clipped
+        let pad = 2.0; // mm
+        minx -= pad;
+        miny -= pad;
+        maxx += pad;
+        maxy += pad;
+    }
 
     let (w_mm, h_mm) = if have_bounds {
         ((maxx - minx).max(1.0), (maxy - miny).max(1.0))
