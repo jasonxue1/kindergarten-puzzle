@@ -1,9 +1,9 @@
 import { defineConfig } from "vite";
 
 export default defineConfig({
-  // Use repo name as base so built assets resolve on GitHub Pages
-  // If you deploy to a custom domain or user site root, adjust this to "/".
-  base: "/kindergarten-puzzle/",
+  // Configure base path via environment variable so branches can deploy
+  // to different subdirectories (e.g. dev -> /dev/, main -> /).
+  base: process.env.BASE_PATH || "/",
   server: {
     port: 5174,
     fs: {
