@@ -8,6 +8,8 @@ Thumbs.db
 *.swp
 *.swo
 .history/
+*.lock
+*lock.yaml
 
 ############################
 # Dev shells / Nix

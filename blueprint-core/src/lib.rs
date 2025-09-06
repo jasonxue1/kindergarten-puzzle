@@ -58,14 +58,10 @@ pub struct Board {
     pub type_: Option<String>,
     pub w: Option<f64>,
     pub h: Option<f64>,
-    pub r: Option<f64>,
-    pub cut_corner: Option<String>,
-    pub points: Option<Vec<[f64; 2]>>,
     pub polygons: Option<Vec<Vec<PolygonPoint>>>,
     pub label: Option<String>,
     pub label_en: Option<String>,
     pub label_zh: Option<String>,
-    pub label_lines: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -456,41 +452,6 @@ fn poly_to_points(poly: &[PolygonPoint]) -> Vec<Point> {
 
 fn board_to_geom(board: &Board) -> Option<Vec<Vec<Point>>> {
     match board.type_.as_deref() {
-        Some("rect_with_quarter_round_cut") => {
-            let w = board.w.unwrap_or(0.0);
-            let h = board.h.unwrap_or(0.0);
-            let r = board.r.unwrap_or(0.0);
-            let corner = board
-                .cut_corner
-                .clone()
-                .unwrap_or_else(|| "topright".to_string());
-            if corner == "topright" {
-                let cx = w - r;
-                let cy = h - r;
-                let n = 24;
-                let mut pts = vec![
-                    Point { x: 0.0, y: 0.0 },
-                    Point { x: w, y: 0.0 },
-                    Point { x: w, y: h - r },
-                ];
-                for i in 0..=n {
-                    let a = 0.0 + std::f64::consts::FRAC_PI_2 * (i as f64) / (n as f64);
-                    pts.push(Point {
-                        x: cx + r * a.cos(),
-                        y: cy + r * a.sin(),
-                    });
-                }
-                pts.push(Point { x: 0.0, y: h });
-                Some(vec![pts])
-            } else {
-                Some(vec![vec![
-                    Point { x: 0.0, y: 0.0 },
-                    Point { x: w, y: 0.0 },
-                    Point { x: w, y: h },
-                    Point { x: 0.0, y: h },
-                ]])
-            }
-        }
         Some("rect") => {
             let w = board.w.unwrap_or(0.0);
             let h = board.h.unwrap_or(0.0);
@@ -509,18 +470,7 @@ fn board_to_geom(board: &Board) -> Option<Vec<Vec<Point>>> {
                     .collect::<Vec<_>>();
                 if geoms.is_empty() { None } else { Some(geoms) }
             } else {
-                let pts = board
-                    .points
-                    .clone()
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(|v| Point { x: v[0], y: v[1] })
-                    .collect::<Vec<_>>();
-                if pts.is_empty() {
-                    None
-                } else {
-                    Some(vec![pts])
-                }
+                None
             }
         }
         _ => None,
@@ -578,17 +528,6 @@ fn svg_escape(s: &str) -> String {
         .replace('<', "&lt;")
         .replace('>', "&gt;")
 }
-fn fmt_mm(v: f64) -> String {
-    if (v - v.round()).abs() < 1e-6 {
-        format!("{:.0}", v)
-    } else {
-        format!("{:.3}", v)
-            .trim_end_matches('0')
-            .trim_end_matches('.')
-            .to_string()
-    }
-}
-
 fn label_from_catalog_only(p: &Piece) -> String {
     if let Some(id) = &p.id {
         let mut hit: Option<String> = None;
@@ -829,51 +768,17 @@ pub fn build_blueprint_svg(
         let h = maxy - miny;
         // Board label left column
         if let Some(b) = &p.board {
-            let mut lines: Vec<String> = Vec::new();
-            if let Some(ls) = &b.label_lines {
-                lines.extend(ls.iter().cloned());
+            if let Some(lbl) = if is_en() {
+                b.label_en.clone().or(b.label.clone())
             } else {
-                if let Some(lbl) = if is_en() {
-                    b.label_en.clone().or(b.label.clone())
-                } else {
-                    b.label_zh.clone().or(b.label.clone())
-                } {
-                    lines.push(lbl);
-                }
-                if let Some(pts) = &b.points {
-                    for p in pts {
-                        lines.push(format!("({},{})", fmt_mm(p[0]), fmt_mm(p[1])));
-                    }
-                } else if let Some(polys) = &b.polygons {
-                    for poly in polys {
-                        for p in poly {
-                            match p {
-                                PolygonPoint::Point([x, y]) | PolygonPoint::Rounded([x, y, _]) => {
-                                    lines.push(format!("({},{})", fmt_mm(*x), fmt_mm(*y)));
-                                }
-                            }
-                        }
-                        lines.push(String::from("--"));
-                    }
-                    if let Some(last) = lines.last()
-                        && last == "--"
-                    {
-                        lines.pop();
-                    }
-                }
-            }
-            let base_y_px = mm2px(total_h_mm - (cursor_y_mm + h / 2.0));
-            let line_gap_px: f64 = 34.0;
-            let n = lines.len() as i32;
-            for (i, txt) in lines.into_iter().enumerate() {
-                let idx = i as i32;
-                let dy = (idx - (n - 1) / 2) as f64 * line_gap_px;
-                let ly = base_y_px + dy;
+                b.label_zh.clone().or(b.label.clone())
+            } {
+                let ly = mm2px(total_h_mm - (cursor_y_mm + h / 2.0));
                 s.push_str(&format!(
                     "<text x=\"{:.2}\" y=\"{:.2}\" fill=\"#333\" font-size=\"30\">{}</text>\n",
                     mm2px(pad_mm + 6.0),
                     ly,
-                    svg_escape(&txt)
+                    svg_escape(&lbl)
                 ));
             }
         }

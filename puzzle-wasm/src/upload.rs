@@ -42,18 +42,9 @@ pub fn attach_file_input(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
                     log("Selected file is empty or unreadable");
                     return;
                 }
-                // Try parse as full Puzzle; fall back to counts+shapes
-                if let Ok(p) = serde_json::from_str::<Puzzle>(&text) {
-                    {
-                        let mut s = st2.borrow_mut();
-                        s.data = p;
-                        assign_piece_colors(&mut s.data);
-                        s.initial_data = s.data.clone();
-                        update_note_dom(&s);
-                        update_status_dom(&s);
-                        draw(&mut s);
-                    }
-                } else if let Ok(spec) = serde_json::from_str::<CountsSpec>(&text) {
+
+                // Try parse as counts+shapes first; fall back to full Puzzle
+                if let Ok(spec) = serde_json::from_str::<CountsSpec>(&text) {
                     // Fetch shapes file if provided; else try server shapes.json, fallback to bundled
                     let st3 = st2.clone();
                     let win: Window = st2.borrow().window.clone();
@@ -118,13 +109,20 @@ pub fn attach_file_input(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
                                 draw(&mut s);
                             }
                             Err(e) => {
-                                log(&format!("Failed to parse shapes catalog: {e}"));
-                                let _ = st3.borrow().window.alert_with_message(
-                                    "Failed to parse shapes.json. Please check the file format.",
-                                );
+                                log(&format!("Failed to parse shapes catalog: {}", e));
                             }
                         }
                     });
+                } else if let Ok(p) = serde_json::from_str::<Puzzle>(&text) {
+                    {
+                        let mut s = st2.borrow_mut();
+                        s.data = p;
+                        assign_piece_colors(&mut s.data);
+                        s.initial_data = s.data.clone();
+                        update_note_dom(&s);
+                        update_status_dom(&s);
+                        draw(&mut s);
+                    }
                 } else {
                     log("Unrecognized puzzle JSON format");
                     let _ = st2

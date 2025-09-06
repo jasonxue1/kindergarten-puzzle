@@ -73,15 +73,11 @@ struct Board {
     type_: Option<String>,
     w: Option<f64>,
     h: Option<f64>,
-    r: Option<f64>,
-    cut_corner: Option<String>,
-    points: Option<Vec<[f64; 2]>>,
     polygons: Option<Vec<Vec<PolygonPoint>>>,
     // Optional labels for export (bilingual support)
     label: Option<String>,
     label_en: Option<String>,
     label_zh: Option<String>,
-    label_lines: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -249,17 +245,6 @@ fn from_screen(x: f64, y: f64, canvas_h: f64, scale: f64, offset: (f64, f64)) ->
     Point {
         x: (x - ox) / scale,
         y: (canvas_h - y - oy) / scale,
-    }
-}
-
-fn fmt_mm(v: f64) -> String {
-    if (v - v.round()).abs() < 1e-6 {
-        format!("{:.0}", v)
-    } else {
-        format!("{:.3}", v)
-            .trim_end_matches('0')
-            .trim_end_matches('.')
-            .to_string()
     }
 }
 
@@ -629,25 +614,6 @@ fn update_note_dom(state: &State) {
         };
         let lang = state.lang.as_str();
         let mut lines: Vec<String> = Vec::new();
-        if let Some(b) = &state.data.board {
-            if let Some(ls) = &b.label_lines {
-                lines.extend(ls.iter().cloned());
-            } else {
-                let lbl = if lang == "zh" {
-                    b.label_zh.clone().or(b.label.clone())
-                } else {
-                    b.label_en.clone().or(b.label.clone())
-                };
-                if let Some(l) = lbl {
-                    lines.push(l);
-                }
-                if let Some(pts) = &b.points {
-                    for p in pts {
-                        lines.push(format!("({},{})", fmt_mm(p[0]), fmt_mm(p[1])));
-                    }
-                }
-            }
-        }
         let mut note_txt = String::new();
         if lang == "zh" {
             if let Some(n) = &state.data.note_zh {
@@ -661,9 +627,6 @@ fn update_note_dom(state: &State) {
             note_txt = n.clone();
         }
         if !note_txt.is_empty() {
-            if !lines.is_empty() {
-                lines.push(String::new());
-            }
             lines.push(note_txt);
         }
         el.set_inner_text(&lines.join("\n"));
@@ -1328,41 +1291,6 @@ fn poly_to_points(poly: &[PolygonPoint]) -> Vec<Point> {
 
 fn board_to_geom(board: &Board) -> Option<Vec<Vec<Point>>> {
     match board.type_.as_deref() {
-        Some("rect_with_quarter_round_cut") => {
-            let w = board.w.unwrap_or(0.0);
-            let h = board.h.unwrap_or(0.0);
-            let r = board.r.unwrap_or(0.0);
-            let corner = board
-                .cut_corner
-                .clone()
-                .unwrap_or_else(|| "topright".to_string());
-            if corner == "topright" {
-                let cx = w - r;
-                let cy = h - r;
-                let n = 24;
-                let mut pts = vec![
-                    Point { x: 0.0, y: 0.0 },
-                    Point { x: w, y: 0.0 },
-                    Point { x: w, y: h - r },
-                ];
-                for i in 0..=n {
-                    let a = 0.0 + std::f64::consts::FRAC_PI_2 * (i as f64) / (n as f64);
-                    pts.push(Point {
-                        x: cx + r * a.cos(),
-                        y: cy + r * a.sin(),
-                    });
-                }
-                pts.push(Point { x: 0.0, y: h });
-                Some(vec![pts])
-            } else {
-                Some(vec![vec![
-                    Point { x: 0.0, y: 0.0 },
-                    Point { x: w, y: 0.0 },
-                    Point { x: w, y: h },
-                    Point { x: 0.0, y: h },
-                ]])
-            }
-        }
         Some("rect") => {
             let w = board.w.unwrap_or(0.0);
             let h = board.h.unwrap_or(0.0);
@@ -1381,132 +1309,15 @@ fn board_to_geom(board: &Board) -> Option<Vec<Vec<Point>>> {
                     .collect::<Vec<_>>();
                 if geoms.is_empty() { None } else { Some(geoms) }
             } else {
-                let pts = board
-                    .points
-                    .clone()
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(|v| Point { x: v[0], y: v[1] })
-                    .collect::<Vec<_>>();
-                if pts.is_empty() {
-                    None
-                } else {
-                    Some(vec![pts])
-                }
+                None
             }
         }
         _ => None,
     }
 }
 
-fn rounded_rect_poly(w: f64, h: f64, r: f64, samples: usize) -> Vec<Point> {
-    let r = r.max(0.0).min((w.min(h)) * 0.5);
-    let mut pts: Vec<Point> = Vec::new();
-    // Start at (r,0) and go clockwise with quarter arcs
-    // Top edge (0,0) to (w,0)
-    // Top-right corner
-    let tr_cx = w - r;
-    let tr_cy = r;
-    // Top-left corner
-    let tl_cx = r;
-    let tl_cy = r;
-    // Bottom-left corner
-    let bl_cx = r;
-    let bl_cy = h - r;
-    // Bottom-right corner
-    let br_cx = w - r;
-    let br_cy = h - r;
-
-    // Top edge from (r,0) to (w-r,0)
-    pts.push(Point { x: r, y: 0.0 });
-    pts.push(Point { x: w - r, y: 0.0 });
-    // Top-right arc 0..90°
-    for i in 0..=samples {
-        let a = 0.0 + std::f64::consts::FRAC_PI_2 * (i as f64) / (samples as f64);
-        pts.push(Point {
-            x: tr_cx + r * a.cos(),
-            y: tr_cy + r * a.sin(),
-        });
-    }
-    // Right edge (w, r) -> (w, h-r)
-    pts.push(Point { x: w, y: r });
-    pts.push(Point { x: w, y: h - r });
-    // Bottom-right arc 90..180°
-    for i in 0..=samples {
-        let a = std::f64::consts::FRAC_PI_2
-            + std::f64::consts::FRAC_PI_2 * (i as f64) / (samples as f64);
-        pts.push(Point {
-            x: br_cx + r * a.cos(),
-            y: br_cy + r * a.sin(),
-        });
-    }
-    // Bottom edge (w-r,h) -> (r,h)
-    pts.push(Point { x: w - r, y: h });
-    pts.push(Point { x: r, y: h });
-    // Bottom-left arc 180..270°
-    for i in 0..=samples {
-        let a = std::f64::consts::PI + std::f64::consts::FRAC_PI_2 * (i as f64) / (samples as f64);
-        pts.push(Point {
-            x: bl_cx + r * a.cos(),
-            y: bl_cy + r * a.sin(),
-        });
-    }
-    // Left edge (0,h-r) -> (0,r)
-    pts.push(Point { x: 0.0, y: h - r });
-    pts.push(Point { x: 0.0, y: r });
-    // Top-left arc 270..360°
-    for i in 0..=samples {
-        let a = 3.0 * std::f64::consts::FRAC_PI_2
-            + std::f64::consts::FRAC_PI_2 * (i as f64) / (samples as f64);
-        pts.push(Point {
-            x: tl_cx + r * a.cos(),
-            y: tl_cy + r * a.sin(),
-        });
-    }
-    pts
-}
-
 fn board_outer_geom(board: &Board, ring: f64) -> Option<Vec<Vec<Point>>> {
     match board.type_.as_deref() {
-        Some("rect_with_quarter_round_cut") => {
-            // Exact outward offset of the special shape:
-            // inner path order: (0,0) -> (w,0) -> (w,h-r) -> quarter arc (cx,cy,r, 0..pi/2) -> (0,h)
-            // outer: expand rectangle by `ring`, arc radius -> r+ring.
-            let w = board.w.unwrap_or(0.0);
-            let h = board.h.unwrap_or(0.0);
-            let r = board.r.unwrap_or(0.0).max(0.0);
-            let cx = w - r;
-            let cy = h - r;
-            let rout = r + ring;
-            let mut pts: Vec<Point> = Vec::new();
-            // start top-left expanded
-            pts.push(Point { x: -ring, y: -ring });
-            // top edge to top-right before arc
-            pts.push(Point {
-                x: w + ring,
-                y: -ring,
-            });
-            // right edge down to arc start (same y as inner arc start)
-            pts.push(Point {
-                x: w + ring,
-                y: h - r,
-            });
-            // expanded arc: 0..pi/2 around (cx,cy) with radius rout
-            let samples = 28usize;
-            for i in 0..=samples {
-                let a = 0.0 + std::f64::consts::FRAC_PI_2 * (i as f64) / (samples as f64);
-                pts.push(Point {
-                    x: cx + rout * a.cos(),
-                    y: cy + rout * a.sin(),
-                });
-            }
-            // top edge left to expanded top-left
-            pts.push(Point {
-                x: -ring,
-                y: h + ring,
-            });
-            Some(vec![pts])
-        }
         Some("rect") => {
             let w = board.w.unwrap_or(0.0);
             let h = board.h.unwrap_or(0.0);
@@ -1537,18 +1348,7 @@ fn board_outer_geom(board: &Board, ring: f64) -> Option<Vec<Vec<Point>>> {
                 }
                 if outs.is_empty() { None } else { Some(outs) }
             } else {
-                let inner = board
-                    .points
-                    .clone()
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(|v| Point { x: v[0], y: v[1] })
-                    .collect::<Vec<_>>();
-                if inner.len() < 3 {
-                    None
-                } else {
-                    Some(vec![polygon_offset_rounded(&inner, ring, 8)])
-                }
+                None
             }
         }
         _ => None,
@@ -2273,14 +2073,10 @@ fn export_png_blueprint(state: &State) -> Result<(), JsValue> {
         type_: b.type_,
         w: b.w,
         h: b.h,
-        r: b.r,
-        cut_corner: b.cut_corner,
-        points: b.points,
         polygons: b.polygons,
         label: b.label,
         label_en: b.label_en,
         label_zh: b.label_zh,
-        label_lines: b.label_lines,
     });
     let pieces = state
         .data
@@ -2617,10 +2413,8 @@ async fn fetch_and_load_puzzle(
     )
     .await
     .unwrap_or_default();
-    // Try parse as full Puzzle; fall back to counts+shapes
-    let puzzle: Puzzle = if let Ok(p) = serde_json::from_str::<Puzzle>(&text) {
-        p
-    } else if let Ok(spec) = serde_json::from_str::<CountsSpec>(&text) {
+    // Try parse as counts+shapes first, then fall back to full Puzzle
+    let puzzle: Puzzle = if let Ok(spec) = serde_json::from_str::<CountsSpec>(&text) {
         // Fetch shapes file if provided; else fallback to bundled shapes
         let shapes_text = if let Some(sf) = spec.shapes_file.clone() {
             fetch_text_with_fallbacks(&window, &[&asset_url(&sf), &sf])
@@ -2643,6 +2437,8 @@ async fn fetch_and_load_puzzle(
             }
         });
         build_puzzle_from_counts(&spec, &catalog)
+    } else if let Ok(p) = serde_json::from_str::<Puzzle>(&text) {
+        p
     } else {
         return Err(JsValue::from_str("Unrecognized puzzle JSON format"));
     };
