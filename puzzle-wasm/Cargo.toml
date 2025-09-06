@@ -29,6 +29,7 @@ geo-types = "0.7"
 version = "0.3"
 features = [
   "Window",
+  "Storage",
   "Location",
   "Document",
   "HtmlCanvasElement",

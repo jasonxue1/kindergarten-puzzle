@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use web_sys::{
-    Blob, CanvasRenderingContext2d, Document, HtmlCanvasElement, HtmlElement, KeyboardEvent,
+    Blob, CanvasRenderingContext2d, Document, Event, HtmlCanvasElement, HtmlElement, KeyboardEvent,
     MouseEvent, Url, Window,
 };
 
@@ -1614,6 +1614,9 @@ fn save_text_as_file(document: &Document, filename: &str, text: &str) -> Result<
 
 fn attach_ui(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
     let doc = state.borrow().document.clone();
+    // Storage helpers (localStorage)
+    let storage_rc: std::rc::Rc<Option<web_sys::Storage>> =
+        std::rc::Rc::new(state.borrow().window.local_storage().ok().flatten());
     // File input
     upload::attach_file_input(state.clone())?;
 
@@ -1684,6 +1687,16 @@ fn attach_ui(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
             sl.dyn_into::<web_sys::HtmlInputElement>(),
             nb.dyn_into::<web_sys::HtmlInputElement>(),
         ) {
+            // Load persisted value if present
+            let persisted = storage_rc
+                .as_ref()
+                .as_ref()
+                .and_then(|s| s.get_item("rot_speed_fast").ok().flatten())
+                .and_then(|v| v.parse::<i32>().ok())
+                .map(|v| v.clamp(1, 180));
+            if let Some(v) = persisted {
+                st.borrow_mut().rot_speed_fast = v as f64;
+            }
             // Set initial values from state
             let val = st.borrow().rot_speed_fast.round().clamp(1.0, 180.0) as i32;
             sl.set_value(&val.to_string());
@@ -1693,6 +1706,7 @@ fn attach_ui(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
             let st1 = st.clone();
             let nb1 = nb.clone();
             let sl_read = sl.clone();
+            let storage1 = storage_rc.clone();
             let oninput = Closure::<dyn FnMut()>::wrap(Box::new(move || {
                 let mut s = st1.borrow_mut();
                 if let Ok(v) = sl_read.value().parse::<i32>() {
@@ -1703,6 +1717,10 @@ fn attach_ui(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
                         let dir = if s.rot_vel > 0.0 { 1.0 } else { -1.0 };
                         s.rot_vel = dir * s.rot_speed_fast;
                     }
+                    // persist
+                    if let Some(store) = storage1.as_ref().as_ref() {
+                        let _ = store.set_item("rot_speed_fast", &format!("{}", v as i32));
+                    }
                 }
             }));
             sl.set_oninput(Some(oninput.as_ref().unchecked_ref()));
@@ -1712,6 +1730,7 @@ fn attach_ui(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
             let st2 = st.clone();
             let sl2 = sl.clone();
             let nb_read = nb.clone();
+            let storage2 = storage_rc.clone();
             let oninput2 = Closure::<dyn FnMut()>::wrap(Box::new(move || {
                 let mut s = st2.borrow_mut();
                 if let Ok(mut v) = nb_read.value().parse::<i32>() {
@@ -1722,6 +1741,9 @@ fn attach_ui(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
                     if s.rot_vel != 0.0 && !s.slow_mode {
                         let dir = if s.rot_vel > 0.0 { 1.0 } else { -1.0 };
                         s.rot_vel = dir * s.rot_speed_fast;
+                    }
+                    if let Some(store) = storage2.as_ref().as_ref() {
+                        let _ = store.set_item("rot_speed_fast", &v.to_string());
                     }
                 }
             }));
@@ -1737,6 +1759,16 @@ fn attach_ui(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
             sl.dyn_into::<web_sys::HtmlInputElement>(),
             nb.dyn_into::<web_sys::HtmlInputElement>(),
         ) {
+            // Load persisted value if present
+            let persisted = storage_rc
+                .as_ref()
+                .as_ref()
+                .and_then(|s| s.get_item("rot_speed_slow").ok().flatten())
+                .and_then(|v| v.parse::<i32>().ok())
+                .map(|v| v.clamp(1, 180));
+            if let Some(v) = persisted {
+                st.borrow_mut().rot_speed_slow = v as f64;
+            }
             // Set initial values from state
             let val = st.borrow().rot_speed_slow.round().clamp(1.0, 180.0) as i32;
             sl.set_value(&val.to_string());
@@ -1746,6 +1778,7 @@ fn attach_ui(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
             let st1 = st.clone();
             let nb1 = nb.clone();
             let sl_read = sl.clone();
+            let storage3 = storage_rc.clone();
             let oninput = Closure::<dyn FnMut()>::wrap(Box::new(move || {
                 let mut s = st1.borrow_mut();
                 if let Ok(v) = sl_read.value().parse::<i32>() {
@@ -1756,6 +1789,10 @@ fn attach_ui(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
                         let dir = if s.rot_vel > 0.0 { 1.0 } else { -1.0 };
                         s.rot_vel = dir * s.rot_speed_slow;
                     }
+                    // persist
+                    if let Some(store) = storage3.as_ref().as_ref() {
+                        let _ = store.set_item("rot_speed_slow", &format!("{}", v as i32));
+                    }
                 }
             }));
             sl.set_oninput(Some(oninput.as_ref().unchecked_ref()));
@@ -1765,6 +1802,7 @@ fn attach_ui(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
             let st2 = st.clone();
             let sl2 = sl.clone();
             let nb_read = nb.clone();
+            let storage4 = storage_rc.clone();
             let oninput2 = Closure::<dyn FnMut()>::wrap(Box::new(move || {
                 let mut s = st2.borrow_mut();
                 if let Ok(mut v) = nb_read.value().parse::<i32>() {
@@ -1775,6 +1813,9 @@ fn attach_ui(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
                     if s.rot_vel != 0.0 && s.slow_mode {
                         let dir = if s.rot_vel > 0.0 { 1.0 } else { -1.0 };
                         s.rot_vel = dir * s.rot_speed_slow;
+                    }
+                    if let Some(store) = storage4.as_ref().as_ref() {
+                        let _ = store.set_item("rot_speed_slow", &v.to_string());
                     }
                 }
             }));
@@ -1977,6 +2018,20 @@ fn attach_ui(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
     }
 
     // Mouse wheel rotation removed by request
+
+    // Redraw on window resize (e.g., DPR or layout changes)
+    {
+        let st = state.clone();
+        let onresize = Closure::<dyn FnMut(Event)>::wrap(Box::new(move |_e: Event| {
+            let mut s = st.borrow_mut();
+            draw(&mut s);
+        }));
+        state
+            .borrow()
+            .window
+            .add_event_listener_with_callback("resize", onresize.as_ref().unchecked_ref())?;
+        onresize.forget();
+    }
 
     Ok(())
 }
@@ -2273,7 +2328,7 @@ pub fn start() -> Result<(), JsValue> {
         rot_vel: 0.0,
         slow_mode: false,
         rot_speed_fast: 180.0,
-        rot_speed_slow: 30.0,
+        rot_speed_slow: 15.0,
         restrict_mode: false,
         shift_down: false,
         initial_data: Puzzle {
@@ -2464,7 +2519,10 @@ fn update_viewport(state: &mut State) {
         (canvas_w / DEFAULT_MM2PX, canvas_h / DEFAULT_MM2PX)
     };
 
-    let margin = 20.0; // px
+    // Internal whitespace around the puzzle content (in canvas pixels),
+    // scale with viewport (similar to CSS vmin-based padding)
+    let vmin = canvas_w.min(canvas_h);
+    let margin = (vmin * 0.04).max(12.0).min(48.0);
     let scale_x = (canvas_w - 2.0 * margin) / w_mm;
     let scale_y = (canvas_h - 2.0 * margin) / h_mm;
     let scale = scale_x.min(scale_y).max(0.1);
