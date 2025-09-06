@@ -1,9 +1,11 @@
 import { defineConfig } from "vite";
 
+// Allow CI to override base path for GitHub Pages per-branch deploys.
+// Falls back to the repo root path used on main.
+const base = process.env.BASE_PATH || "/kindergarten-puzzle/";
+
 export default defineConfig({
-  // Use repo name as base so built assets resolve on GitHub Pages
-  // If you deploy to a custom domain or user site root, adjust this to "/".
-  base: "/kindergarten-puzzle/",
+  base,
   server: {
     port: 5174,
     fs: {
