@@ -9,7 +9,7 @@
   },
   "scripts": {
     "dev": "node scripts/dev-prepare.mjs && vite",
-    "build": "vite build",
+    "build": "node scripts/dev-prepare.mjs && vite build",
     "preview": "vite preview"
   },
   "dependencies": {

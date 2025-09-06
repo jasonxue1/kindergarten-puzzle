@@ -28,6 +28,29 @@ const RING_WIDTH_MM: f64 = 8.0;
 // Unified radius for circle pieces (mm)
 const CIRCLE_R_MM: f64 = 15.0;
 
+// Ensure the canvas backing store matches the CSS size and device pixel ratio
+// to prevent non-uniform stretching.
+fn sync_canvas_size(state: &mut State) {
+    let dpr = state.window.device_pixel_ratio();
+    let (css_w, css_h) = if let Some(el) = state.canvas.dyn_ref::<web_sys::Element>() {
+        let rect = el.get_bounding_client_rect();
+        (rect.width().max(1.0), rect.height().max(1.0))
+    } else {
+        (
+            state.canvas.client_width() as f64,
+            state.canvas.client_height() as f64,
+        )
+    };
+    let target_w = (css_w * dpr).round().clamp(1.0, 10000.0) as u32;
+    let target_h = (css_h * dpr).round().clamp(1.0, 10000.0) as u32;
+    if state.canvas.width() != target_w {
+        state.canvas.set_width(target_w);
+    }
+    if state.canvas.height() != target_h {
+        state.canvas.set_height(target_h);
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 struct Point {
     x: f64,
@@ -49,6 +72,11 @@ struct Board {
     r: Option<f64>,
     cut_corner: Option<String>,
     points: Option<Vec<[f64; 2]>>,
+    // Optional labels for export (bilingual support)
+    label: Option<String>,
+    label_en: Option<String>,
+    label_zh: Option<String>,
+    label_lines: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -148,6 +176,10 @@ struct ShapeDef {
     base: Option<f64>,
     offset_top: Option<f64>,
     points: Option<Vec<[f64; 2]>>,
+    // Optional human labels (bilingual)
+    label: Option<String>,
+    label_en: Option<String>,
+    label_zh: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -189,6 +221,8 @@ struct State {
     initial_data: Puzzle,
     // UI language: "en" or "zh"
     lang: String,
+    // Optional shapes catalog for label lookup during export
+    shapes_catalog: Option<ShapesCatalog>,
 }
 
 thread_local! {
@@ -422,6 +456,7 @@ fn piece_geom(p: &Piece) -> (Vec<Point>, Point) {
 }
 
 fn draw(state: &mut State) {
+    sync_canvas_size(state);
     update_viewport(state);
     let width = state.canvas.width() as f64;
     let height = state.canvas.height() as f64;
@@ -2024,6 +2059,7 @@ fn attach_ui(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
         let st = state.clone();
         let onresize = Closure::<dyn FnMut(Event)>::wrap(Box::new(move |_e: Event| {
             let mut s = st.borrow_mut();
+            sync_canvas_size(&mut s);
             draw(&mut s);
         }));
         state
@@ -2040,17 +2076,43 @@ fn export_png_blueprint(state: &State) -> Result<(), JsValue> {
     let px_per_mm = 4.0; // export resolution
     // Set language for labels
     blueprint_core::set_language(&state.lang);
+    // If we have a shapes catalog, build a label map and inject it so
+    // blueprint-core can group with human labels even in the browser.
+    if let Some(cat) = &state.shapes_catalog {
+        use std::collections::HashMap;
+        let mut map: HashMap<String, String> = HashMap::new();
+        let zh = state.lang == "zh";
+        for s in &cat.shapes {
+            let chosen = if zh {
+                s.label_zh.clone()
+            } else {
+                s.label_en.clone()
+            };
+            if let Some(lbl) = chosen {
+                map.insert(s.id.clone(), lbl);
+            }
+        }
+        blueprint_core::set_label_map(&map);
+    }
 
     // Build a PuzzleSpec (pieces-only), ignoring current poses to match CLI blueprint semantics
-    let board = state.data.board.clone().map(|b| blueprint_core::Board {
-        type_: b.type_,
-        w: b.w,
-        h: b.h,
-        r: b.r,
-        cut_corner: b.cut_corner,
-        points: b.points,
-        label: None,
-        label_lines: None,
+    let board = state.data.board.clone().map(|b| {
+        // Choose label according to current language
+        let lbl = if state.lang == "zh" {
+            b.label_zh.clone().or(b.label.clone())
+        } else {
+            b.label_en.clone()
+        };
+        blueprint_core::Board {
+            type_: b.type_,
+            w: b.w,
+            h: b.h,
+            r: b.r,
+            cut_corner: b.cut_corner,
+            points: b.points,
+            label: lbl,
+            label_lines: b.label_lines,
+        }
     });
     let pieces = state
         .data
@@ -2206,6 +2268,7 @@ fn build_puzzle_from_counts(spec: &CountsSpec, catalog: &ShapesCatalog) -> Puzzl
         if let Some(sd) = by_id.get(id.as_str()) {
             for _ in 0..*ct {
                 let p = Piece {
+                    id: Some(sd.id.clone()),
                     type_: sd.type_.clone(),
                     w: sd.w,
                     h: sd.h,
@@ -2299,20 +2362,29 @@ pub fn start() -> Result<(), JsValue> {
     let (canvas, ctx) = init_canvas(&document)?;
 
     let data = default_puzzle();
-    // If URL param p is set, we try to fetch puzzles/<p>.json; otherwise use default
-    if let Ok(search) = window.location().search()
-        && let Some(p) = get_query_param(&search, "p")
-    {
-        // Try to fetch; fire-and-forget; fallback to default already loaded
-        let win = window.clone();
-        let doc = document.clone();
-        let cv = canvas.clone();
-        let ctx2 = ctx.clone();
-        wasm_bindgen_futures::spawn_local(async move {
-            if let Err(err) = fetch_and_load_puzzle(win, doc, cv, ctx2, &p).await {
-                log(&format!("Failed to load puzzle '{}': {:?}", p, err));
-            }
-        });
+    // If URL param p is set, fetch that; otherwise also fetch default 'k11' from server
+    if let Ok(search) = window.location().search() {
+        if let Some(p) = get_query_param(&search, "p") {
+            let win = window.clone();
+            let doc = document.clone();
+            let cv = canvas.clone();
+            let ctx2 = ctx.clone();
+            wasm_bindgen_futures::spawn_local(async move {
+                if let Err(err) = fetch_and_load_puzzle(win, doc, cv, ctx2, &p).await {
+                    log(&format!("Failed to load puzzle '{}': {:?}", p, err));
+                }
+            });
+        } else {
+            let win = window.clone();
+            let doc = document.clone();
+            let cv = canvas.clone();
+            let ctx2 = ctx.clone();
+            wasm_bindgen_futures::spawn_local(async move {
+                if let Err(err) = fetch_and_load_puzzle(win, doc, cv, ctx2, "k11").await {
+                    log(&format!("Failed to load default puzzle 'k11': {:?}", err));
+                }
+            });
+        }
     }
 
     let state = Rc::new(RefCell::new(State {
@@ -2339,6 +2411,8 @@ pub fn start() -> Result<(), JsValue> {
             note_zh: None,
         },
         lang: "en".to_string(),
+        shapes_catalog: serde_json::from_str::<ShapesCatalog>(include_str!("../../shapes.json"))
+            .ok(),
     }));
 
     STATE.with(|st| st.replace(Some(state.clone())));
@@ -2385,10 +2459,21 @@ async fn fetch_and_load_puzzle(
                 .await
                 .unwrap_or_default()
         } else {
-            include_str!("../../shapes.json").to_string()
+            match fetch_text_with_fallbacks(&window, &[&asset_url("shapes.json"), "shapes.json"])
+                .await
+            {
+                Some(s) => s,
+                None => include_str!("../../shapes.json").to_string(),
+            }
         };
         let catalog = serde_json::from_str::<ShapesCatalog>(&shapes_text)
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        // keep catalog for export labels
+        STATE.with(|st| {
+            if let Some(st_rc) = st.borrow().as_ref() {
+                st_rc.borrow_mut().shapes_catalog = Some(catalog.clone());
+            }
+        });
         build_puzzle_from_counts(&spec, &catalog)
     } else {
         return Err(JsValue::from_str("Unrecognized puzzle JSON format"));

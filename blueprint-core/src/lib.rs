@@ -21,6 +21,19 @@ pub fn set_language(lang: &str) {
     LANGUAGE.with(|s| s.replace(l.to_string()));
 }
 
+// Inject or replace the label map used when grouping pieces by ID.
+// This enables callers (e.g., browser runtimes) to supply labels without
+// requiring file access to shapes.json during rendering.
+pub fn set_label_map(map: &HashMap<String, String>) {
+    LABEL_MAP.with(|m| {
+        let mut mm = m.borrow_mut();
+        mm.clear();
+        for (k, v) in map.iter() {
+            mm.insert(k.clone(), v.clone());
+        }
+    });
+}
+
 fn is_en() -> bool {
     LANGUAGE.with(|s| s.borrow().as_str() == "en")
 }
@@ -571,7 +584,7 @@ fn label_for_piece(p: &Piece) -> String {
         _ => p.type_.clone(),
     }
 }
-fn label_from_catalog_or_fallback(p: &Piece) -> String {
+fn label_from_catalog_only(p: &Piece) -> String {
     if let Some(id) = &p.id {
         let mut hit: Option<String> = None;
         LABEL_MAP.with(|m| {
@@ -583,7 +596,43 @@ fn label_from_catalog_or_fallback(p: &Piece) -> String {
             return s;
         }
     }
-    label_for_piece(p)
+    String::new()
+}
+
+fn group_key_for_piece(p: &Piece) -> String {
+    if let Some(id) = &p.id {
+        return id.clone();
+    }
+    // Fallback: stable signature from type and key parameters (no localization)
+    match p.type_.as_str() {
+        "rect" => format!("rect:w={};h={}", p.w.unwrap_or(0.0), p.h.unwrap_or(0.0)),
+        "equilateral_triangle" => format!("equilateral_triangle:side={}", p.side.unwrap_or(0.0)),
+        "right_triangle" => format!(
+            "right_triangle:a={};b={}",
+            p.a.unwrap_or(0.0),
+            p.b.unwrap_or(0.0)
+        ),
+        "regular_polygon" => format!(
+            "regular_polygon:n={};side={}",
+            p.n.unwrap_or(0),
+            p.side.unwrap_or(0.0)
+        ),
+        "circle" => format!("circle:d={};r={}", p.d.unwrap_or(0.0), p.r.unwrap_or(0.0)),
+        "isosceles_trapezoid" => format!(
+            "isosceles_trapezoid:bb={};bt={};h={}",
+            p.base_bottom.unwrap_or(0.0),
+            p.base_top.unwrap_or(0.0),
+            p.height.unwrap_or(0.0)
+        ),
+        "parallelogram" => format!(
+            "parallelogram:base={};off={};h={}",
+            p.base.unwrap_or(0.0),
+            p.offset_top.unwrap_or(0.0),
+            p.height.unwrap_or(0.0)
+        ),
+        "polygon" => "polygon".to_string(),
+        other => other.to_string(),
+    }
 }
 
 pub fn build_blueprint_svg(
@@ -591,7 +640,8 @@ pub fn build_blueprint_svg(
     px_per_mm: f64,
     shapes_path: Option<&str>,
 ) -> (String, u32, u32) {
-    LABEL_MAP.with(|m| m.borrow_mut().clear());
+    // Do not clear LABEL_MAP here; callers may have provided labels via
+    // set_label_map(). When counts are provided below, we overwrite entries.
     let mut board_geom: Vec<Point> = Vec::new();
     let mut board_bounds: Option<(f64, f64, f64, f64)> = None;
     if let Some(b) = &p.board
@@ -689,17 +739,18 @@ pub fn build_blueprint_svg(
         if g.is_empty() {
             continue;
         }
-        let label = label_from_catalog_or_fallback(pc);
+        let key = group_key_for_piece(pc);
+        let label = label_from_catalog_only(pc);
         let it = Item {
             geom: g.clone(),
             bounds: bounds_of(&g),
         };
-        if let Some(i) = index.get(&label) {
+        if let Some(i) = index.get(&key) {
             groups[*i].1.push(it);
         } else {
             let id = groups.len();
             groups.push((label.clone(), vec![it]));
-            index.insert(label, id);
+            index.insert(key, id);
         }
     }
 
@@ -777,23 +828,8 @@ pub fn build_blueprint_svg(
             let mut lines: Vec<String> = Vec::new();
             if let Some(ls) = &b.label_lines {
                 lines.extend(ls.iter().cloned());
-            } else {
-                let wtxt = fmt_mm(w);
-                let htxt = fmt_mm(h);
-                let rtxt = b.r.unwrap_or(0.0);
-                if let Some(lbl) = &b.label {
-                    lines.push(lbl.clone());
-                } else if rtxt > 0.0 {
-                    if is_en() {
-                        lines.push(format!("Board {}×{} mm (R{})", wtxt, htxt, fmt_mm(rtxt)));
-                    } else {
-                        lines.push(format!("外框 {}×{}mm（R{}）", wtxt, htxt, fmt_mm(rtxt)));
-                    }
-                } else if is_en() {
-                    lines.push(format!("Board {}×{} mm", wtxt, htxt));
-                } else {
-                    lines.push(format!("外框 {}×{}mm", wtxt, htxt));
-                }
+            } else if let Some(lbl) = &b.label {
+                lines.push(lbl.clone());
             }
             let base_y_px = mm2px(total_h_mm - (cursor_y_mm + h / 2.0));
             let line_gap_px: f64 = 34.0;

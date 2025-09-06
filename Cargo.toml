@@ -4,6 +4,8 @@ resolver = "3"
 
 [workspace.package]
 edition = "2024"
+license = "MIT"
+authors = ["jasonxue"]
 
 [profile.release]
 opt-level = "s"

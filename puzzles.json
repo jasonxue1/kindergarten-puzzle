@@ -1,8 +1,7 @@
 [
   {
     "id": "k11",
-    "title": "k11（示例）",
-    "path": "puzzle/k11.json",
-    "desc": "示例拼图：带圆角裁切矩形底板 + 多种形状"
+    "title": "k11",
+    "path": "puzzle/k11.json"
   }
 ]

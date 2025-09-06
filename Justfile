@@ -12,11 +12,6 @@ build:
     # wasm-pack uses the crate dir as the base for --out-dir; use ../ to place pkg at repo root
     wasm-pack build --target web --release --out-dir ../{{ OUT_DIR }} {{ CRATE_DIR }}
 
-# Build a debug/dev bundle (faster compile, bigger output)
-build-dev:
-    # Place dev build at repo-root ./pkg as well
-    wasm-pack build --target web --dev --out-dir ../{{ OUT_DIR }} {{ CRATE_DIR }}
-
 # Clean generated artifacts
 clean:
     # Remove all files that are matched by .gitignore across the repo
@@ -25,12 +20,6 @@ clean:
 # Serve the app locally using pnpm (modern web UI)
 serve:
     cd web && pnpm install && pnpm dev
-
-# Rebuild on changes (requires watchexec; optional)
-watch:
-    watchexec -e rs -w {{ CRATE_DIR }} -r -- just build
-
-# CLI PNG export removed; use the web UI toolbar to export PNG.
 
 # Format all code and content
 fmt:
