@@ -3,5 +3,11 @@
     "id": "k11",
     "title": "k11",
     "path": "puzzle/k11.json"
+  },
+  {
+    "id": "k12",
+    "title": "k12",
+    "path": "puzzle/k12.json"
   }
 ]
+
