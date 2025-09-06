@@ -2,20 +2,17 @@ name: Build and Deploy Pages
 
 on:
   push:
-    branches: [main]
-  pull_request:
+    branches: [main, dev, "feat/**", "codex/**"]
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
-  group: pages
+  group: pages-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -39,16 +36,14 @@ jobs:
         with:
           version: latest
 
-      - name: Build WASM (wasm-pack)
+      - name: Build WASM (wasm-pack -> web/public/pkg)
+        env:
+          OUT_DIR: ${{ github.workspace }}/web/public/pkg
         run: |
-          # out-dir is relative to the crate, place output at repo-root ./pkg
-          wasm-pack build --target web --release --out-dir ../pkg puzzle-wasm
-
-      - name: Upload wasm pkg artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: wasm-pkg
-          path: pkg
+          rm -rf "$OUT_DIR"
+          mkdir -p "$OUT_DIR"
+          wasm-pack build --target web --release --out-dir "$OUT_DIR" puzzle-wasm
+          rm -f "$OUT_DIR/.gitignore"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -60,7 +55,6 @@ jobs:
         with:
           version: 9
 
-      # Now that pnpm is installed, enable pnpm caching
       - name: Setup Node.js cache (pnpm)
         uses: actions/setup-node@v4
         with:
@@ -74,33 +68,52 @@ jobs:
 
       - name: Build modern web UI (Vite)
         working-directory: web
+        env:
+          BASE_PATH: ${{ format('/{0}/{1}/', github.event.repository.name, github.ref_name) }}
         run: pnpm build
 
-      - name: Prepare site for Pages
+      - name: Ensure WASM artifacts are in dist
+        shell: bash
+        env:
+          OUT_DIR: ${{ github.workspace }}/web/public/pkg
         run: |
-          rm -rf dist
-          mkdir -p dist
-          # Copy Vite build
-          cp -r web/dist/* dist/
-          # Include WASM pkg and static data
-          cp -r pkg dist/
-          cp -r puzzle dist/
-          cp shapes.json dist/
-          cp puzzles.json dist/
+          set -euo pipefail
+          mkdir -p web/dist/pkg
+          shopt -s nullglob
+          files=("$OUT_DIR"/*)
+          cp -av "${files[@]}" web/dist/pkg/
+          cp -av web/public/wasm-bridge.js web/dist/ || true
+          cp -av web/public/puzzle web/dist/
+          for f in puzzles.json shapes.json; do
+            cp -av "web/public/$f" web/dist/;
+          done
 
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: Checkout gh-pages to clear subfolder
+        uses: actions/checkout@v4
         with:
-          path: dist
+          ref: gh-pages
+          path: ghp
 
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Delete subfolder and push
+        run: |
+          set -e
+          cd ghp
+          BRANCH_DIR="${{ github.ref_name }}"
+          if [ -d "$BRANCH_DIR" ]; then
+            echo "Removing gh-pages/$BRANCH_DIR before deploy"
+            git rm -r --ignore-unmatch "$BRANCH_DIR" || true
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -m "ci: clear $BRANCH_DIR before deploy" || echo "nothing to commit"
+          git push origin gh-pages
+
+      - name: Deploy to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: web/dist
+          destination_dir: ${{ github.ref_name }}
+          keep_files: true
+          enable_jekyll: false
