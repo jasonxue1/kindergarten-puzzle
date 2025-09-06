@@ -1277,6 +1277,16 @@ fn board_to_geom(board: &Board) -> Option<Vec<Point>> {
                 ])
             }
         }
+        Some("rect") => {
+            let w = board.w.unwrap_or(0.0);
+            let h = board.h.unwrap_or(0.0);
+            Some(vec![
+                Point { x: 0.0, y: 0.0 },
+                Point { x: w, y: 0.0 },
+                Point { x: w, y: h },
+                Point { x: 0.0, y: h },
+            ])
+        }
         Some("polygon") => {
             let pts = board
                 .points
@@ -1398,6 +1408,25 @@ fn board_outer_geom(board: &Board, ring: f64) -> Option<Vec<Point>> {
                 y: h + ring,
             });
             Some(pts)
+        }
+        Some("rect") => {
+            let w = board.w.unwrap_or(0.0);
+            let h = board.h.unwrap_or(0.0);
+            Some(vec![
+                Point { x: -ring, y: -ring },
+                Point {
+                    x: w + ring,
+                    y: -ring,
+                },
+                Point {
+                    x: w + ring,
+                    y: h + ring,
+                },
+                Point {
+                    x: -ring,
+                    y: h + ring,
+                },
+            ])
         }
         Some("polygon") => {
             // Rounded outward offset of the given polygon by `ring` using
