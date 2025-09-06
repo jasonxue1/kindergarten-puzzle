@@ -137,19 +137,22 @@ const App: React.FC = () => {
     const cv = canvasRef.current;
     const wrap = boardWrapRef.current;
     if (!cv || !wrap) return;
-    const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
     const resize = () => {
       const rect = wrap.getBoundingClientRect();
       const cssW = Math.max(1, Math.floor(rect.width));
       const cssH = Math.max(1, Math.floor(rect.height));
+      // Recompute DPR on every resize to handle zoom or DPI changes.
+      const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
       // Set CSS size via style (already 100%) and update backing size
       const targetW = Math.floor(cssW * dpr);
       const targetH = Math.floor(cssH * dpr);
       if (cv.width !== targetW || cv.height !== targetH) {
         cv.width = targetW;
         cv.height = targetH;
-        // Notify WASM to redraw (Rust listens to window 'resize')
-        window.dispatchEvent(new Event("resize"));
+        // Notify WASM to redraw (Rust listens to window 'resize').
+        requestAnimationFrame(() =>
+          window.dispatchEvent(new Event("resize")),
+        );
       }
     };
     const ro = new ResizeObserver(() => resize());
