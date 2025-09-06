@@ -1,3 +1,5 @@
+#![allow(dead_code, clippy::all)]
+
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -129,6 +131,7 @@ struct Piece {
 struct Puzzle {
     units: Option<String>,
     board: Option<Board>,
+    #[serde(default)]
     pieces: Vec<Piece>,
     // Optional per-puzzle notes in two languages
     note_en: Option<String>,
@@ -2162,23 +2165,17 @@ fn export_png_blueprint(state: &State) -> Result<(), JsValue> {
     }
 
     // Build a PuzzleSpec (pieces-only), ignoring current poses to match CLI blueprint semantics
-    let board = state.data.board.clone().map(|b| {
-        // Choose label according to current language
-        let lbl = if state.lang == "zh" {
-            b.label_zh.clone().or(b.label.clone())
-        } else {
-            b.label_en.clone()
-        };
-        blueprint_core::Board {
-            type_: b.type_,
-            w: b.w,
-            h: b.h,
-            r: b.r,
-            cut_corner: b.cut_corner,
-            points: b.points,
-            label: lbl,
-            label_lines: b.label_lines,
-        }
+    let board = state.data.board.clone().map(|b| blueprint_core::Board {
+        type_: b.type_,
+        w: b.w,
+        h: b.h,
+        r: b.r,
+        cut_corner: b.cut_corner,
+        points: b.points,
+        label: b.label,
+        label_en: b.label_en,
+        label_zh: b.label_zh,
+        label_lines: b.label_lines,
     });
     let pieces = state
         .data
