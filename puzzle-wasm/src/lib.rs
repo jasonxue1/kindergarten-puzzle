@@ -2206,7 +2206,7 @@ fn export_png_blueprint(state: &State) -> Result<(), JsValue> {
         r: b.r,
         cut_corner: b.cut_corner,
         points: b.points,
-        polygons: b.polygons,
+ feat/new_puzzle_k_double
         label: b.label,
         label_en: b.label_en,
         label_zh: b.label_zh,
