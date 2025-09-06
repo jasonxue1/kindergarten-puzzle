@@ -44,6 +44,14 @@ pub struct Point {
     pub y: f64,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum PolygonPoint {
+    Point([f64; 2]),
+    /// Corner with rounding radius: [x, y, r]
+    Rounded([f64; 3]),
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Board {
     #[serde(rename = "type")]
@@ -53,7 +61,10 @@ pub struct Board {
     pub r: Option<f64>,
     pub cut_corner: Option<String>,
     pub points: Option<Vec<[f64; 2]>>,
+    pub polygons: Option<Vec<Vec<PolygonPoint>>>,
     pub label: Option<String>,
+    pub label_en: Option<String>,
+    pub label_zh: Option<String>,
     pub label_lines: Option<Vec<String>>,
 }
 
@@ -370,7 +381,80 @@ fn piece_geom(p: &Piece) -> (Vec<Point>, Point) {
     }
 }
 
-fn board_to_geom(board: &Board) -> Option<Vec<Point>> {
+fn normalize(p: Point) -> Point {
+    let len = (p.x * p.x + p.y * p.y).sqrt();
+    if len == 0.0 {
+        Point { x: 0.0, y: 0.0 }
+    } else {
+        Point {
+            x: p.x / len,
+            y: p.y / len,
+        }
+    }
+}
+
+fn poly_to_points(poly: &[PolygonPoint]) -> Vec<Point> {
+    let mut out: Vec<Point> = Vec::new();
+    let n = poly.len();
+    let mut i = 0;
+    while i < n {
+        match &poly[i] {
+            PolygonPoint::Point([x, y]) => {
+                out.push(Point { x: *x, y: *y });
+                i += 1;
+            }
+            PolygonPoint::Rounded([x, y, r]) => {
+                if out.is_empty() || i + 1 >= n {
+                    i += 1;
+                    continue;
+                }
+                let prev = *out.last().unwrap();
+                let next_xy = match &poly[i + 1] {
+                    PolygonPoint::Point([nx, ny]) => Point { x: *nx, y: *ny },
+                    PolygonPoint::Rounded([nx, ny, _]) => Point { x: *nx, y: *ny },
+                };
+                let corner = Point { x: *x, y: *y };
+                let radius = *r;
+                let v1 = normalize(Point {
+                    x: prev.x - corner.x,
+                    y: prev.y - corner.y,
+                });
+                let v2 = normalize(Point {
+                    x: next_xy.x - corner.x,
+                    y: next_xy.y - corner.y,
+                });
+                let start = Point {
+                    x: corner.x + v1.x * radius,
+                    y: corner.y + v1.y * radius,
+                };
+                let end = Point {
+                    x: corner.x + v2.x * radius,
+                    y: corner.y + v2.y * radius,
+                };
+                out.push(start);
+                let center = Point {
+                    x: corner.x + (v1.x + v2.x) * radius,
+                    y: corner.y + (v1.y + v2.y) * radius,
+                };
+                let start_ang = (start.y - center.y).atan2(start.x - center.x);
+                let end_ang = (end.y - center.y).atan2(end.x - center.x);
+                let steps = 24;
+                for j in 1..=steps {
+                    let t = j as f64 / steps as f64;
+                    let ang = start_ang + (end_ang - start_ang) * t;
+                    out.push(Point {
+                        x: center.x + radius * ang.cos(),
+                        y: center.y + radius * ang.sin(),
+                    });
+                }
+                i += 1;
+            }
+        }
+    }
+    out
+}
+
+fn board_to_geom(board: &Board) -> Option<Vec<Vec<Point>>> {
     match board.type_.as_deref() {
         Some("rect_with_quarter_round_cut") => {
             let w = board.w.unwrap_or(0.0);
@@ -397,35 +481,48 @@ fn board_to_geom(board: &Board) -> Option<Vec<Point>> {
                     });
                 }
                 pts.push(Point { x: 0.0, y: h });
-                Some(pts)
+                Some(vec![pts])
             } else {
-                Some(vec![
+                Some(vec![vec![
                     Point { x: 0.0, y: 0.0 },
                     Point { x: w, y: 0.0 },
                     Point { x: w, y: h },
                     Point { x: 0.0, y: h },
-                ])
+                ]])
             }
         }
         Some("rect") => {
             let w = board.w.unwrap_or(0.0);
             let h = board.h.unwrap_or(0.0);
-            Some(vec![
+            Some(vec![vec![
                 Point { x: 0.0, y: 0.0 },
                 Point { x: w, y: 0.0 },
                 Point { x: w, y: h },
                 Point { x: 0.0, y: h },
-            ])
+            ]])
         }
-        Some("polygon") => Some(
-            board
-                .points
-                .clone()
-                .unwrap_or_default()
-                .into_iter()
-                .map(|v| Point { x: v[0], y: v[1] })
-                .collect(),
-        ),
+        Some("polygon") => {
+            if let Some(polys) = &board.polygons {
+                let geoms = polys
+                    .iter()
+                    .map(|poly| poly_to_points(poly))
+                    .collect::<Vec<_>>();
+                if geoms.is_empty() { None } else { Some(geoms) }
+            } else {
+                let pts = board
+                    .points
+                    .clone()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|v| Point { x: v[0], y: v[1] })
+                    .collect::<Vec<_>>();
+                if pts.is_empty() {
+                    None
+                } else {
+                    Some(vec![pts])
+                }
+            }
+        }
         _ => None,
     }
 }
@@ -437,6 +534,10 @@ fn translate_geom(pts: &[Point], dx: f64, dy: f64) -> Vec<Point> {
             y: p.y + dy,
         })
         .collect()
+}
+
+fn translate_geoms(geoms: &[Vec<Point>], dx: f64, dy: f64) -> Vec<Vec<Point>> {
+    geoms.iter().map(|g| translate_geom(g, dx, dy)).collect()
 }
 fn bounds_of(pts: &[Point]) -> (f64, f64, f64, f64) {
     let (mut minx, mut miny, mut maxx, mut maxy) = (
@@ -454,6 +555,24 @@ fn bounds_of(pts: &[Point]) -> (f64, f64, f64, f64) {
     (minx, miny, maxx, maxy)
 }
 
+fn bounds_of_all(polys: &[Vec<Point>]) -> (f64, f64, f64, f64) {
+    let mut first = true;
+    let mut out = (0.0, 0.0, 0.0, 0.0);
+    for p in polys {
+        let b = bounds_of(p);
+        if first {
+            out = b;
+            first = false;
+        } else {
+            out.0 = out.0.min(b.0);
+            out.1 = out.1.min(b.1);
+            out.2 = out.2.max(b.2);
+            out.3 = out.3.max(b.3);
+        }
+    }
+    out
+}
+
 fn svg_escape(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('<', "&lt;")
@@ -469,121 +588,7 @@ fn fmt_mm(v: f64) -> String {
             .to_string()
     }
 }
-fn label_for_piece(p: &Piece) -> String {
-    let f = |v: f64| -> String { fmt_mm(v) };
-    match p.type_.as_str() {
-        "circle" => {
-            let d = p.d.unwrap_or_else(|| p.r.unwrap_or(0.0) * 2.0);
-            if is_en() {
-                format!("Circle (diameter {} mm)", f(d))
-            } else {
-                format!("圆（直径 {}mm）", f(d))
-            }
-        }
-        "rect" => {
-            let w = p.w.unwrap_or(0.0);
-            let h = p.h.unwrap_or(0.0);
-            if (w - h).abs() < 1e-6 {
-                if is_en() {
-                    format!("Square (side {} mm)", f(w))
-                } else {
-                    format!("正方形（边长 {}mm）", f(w))
-                }
-            } else if is_en() {
-                format!("Rectangle ({}×{} mm)", f(w), f(h))
-            } else {
-                format!("长方形（{}×{}mm）", f(w), f(h))
-            }
-        }
-        "regular_polygon" => {
-            let n = p.n.unwrap_or(3);
-            let side = p.side.unwrap_or(0.0);
-            match n {
-                5 => {
-                    if is_en() {
-                        format!("Regular pentagon (side {} mm)", f(side))
-                    } else {
-                        format!("正五边形（边长 {}mm）", f(side))
-                    }
-                }
-                6 => {
-                    if is_en() {
-                        format!("Regular hexagon (side {} mm)", f(side))
-                    } else {
-                        format!("正六边形（边长 {}mm）", f(side))
-                    }
-                }
-                _ => {
-                    if is_en() {
-                        format!("Regular {}-gon (side {} mm)", n, f(side))
-                    } else {
-                        format!("正{}边形（边长 {}mm）", n, f(side))
-                    }
-                }
-            }
-        }
-        "equilateral_triangle" => {
-            if is_en() {
-                format!(
-                    "Equilateral triangle (side {} mm)",
-                    f(p.side.unwrap_or(0.0))
-                )
-            } else {
-                format!("正三角形（边长 {}mm）", f(p.side.unwrap_or(0.0)))
-            }
-        }
-        "right_triangle" => {
-            if is_en() {
-                format!(
-                    "Right triangle (legs {}×{} mm)",
-                    f(p.a.unwrap_or(0.0)),
-                    f(p.b.unwrap_or(0.0))
-                )
-            } else {
-                format!(
-                    "直角三角形（直角边 {}×{}mm）",
-                    f(p.a.unwrap_or(0.0)),
-                    f(p.b.unwrap_or(0.0))
-                )
-            }
-        }
-        "isosceles_trapezoid" => {
-            if is_en() {
-                format!(
-                    "Isosceles trapezoid (bottom {} mm, top {} mm, height {} mm)",
-                    f(p.base_bottom.unwrap_or(0.0)),
-                    f(p.base_top.unwrap_or(0.0)),
-                    f(p.height.unwrap_or(0.0))
-                )
-            } else {
-                format!(
-                    "等腰梯形（下底 {}mm，上底 {}mm，高 {}mm）",
-                    f(p.base_bottom.unwrap_or(0.0)),
-                    f(p.base_top.unwrap_or(0.0)),
-                    f(p.height.unwrap_or(0.0))
-                )
-            }
-        }
-        "parallelogram" => {
-            if is_en() {
-                format!(
-                    "Parallelogram (base {} mm, top offset {} mm, height {} mm)",
-                    f(p.base.unwrap_or(0.0)),
-                    f(p.offset_top.unwrap_or(0.0)),
-                    f(p.height.unwrap_or(0.0))
-                )
-            } else {
-                format!(
-                    "平行四边形（底 {}mm，顶边偏移 {}mm，高 {}mm）",
-                    f(p.base.unwrap_or(0.0)),
-                    f(p.offset_top.unwrap_or(0.0)),
-                    f(p.height.unwrap_or(0.0))
-                )
-            }
-        }
-        _ => p.type_.clone(),
-    }
-}
+
 fn label_from_catalog_only(p: &Piece) -> String {
     if let Some(id) = &p.id {
         let mut hit: Option<String> = None;
@@ -642,12 +647,12 @@ pub fn build_blueprint_svg(
 ) -> (String, u32, u32) {
     // Do not clear LABEL_MAP here; callers may have provided labels via
     // set_label_map(). When counts are provided below, we overwrite entries.
-    let mut board_geom: Vec<Point> = Vec::new();
+    let mut board_geom: Vec<Vec<Point>> = Vec::new();
     let mut board_bounds: Option<(f64, f64, f64, f64)> = None;
     if let Some(b) = &p.board
         && let Some(g) = board_to_geom(b)
     {
-        board_bounds = Some(bounds_of(&g));
+        board_bounds = Some(bounds_of_all(&g));
         board_geom = g;
     }
 
@@ -820,8 +825,7 @@ pub fn build_blueprint_svg(
     draw_hline(&mut s, pad_mm);
     let mut cursor_y_mm = pad_mm;
     if !board_geom.is_empty() {
-        let (minx, miny, maxx, maxy) = board_bounds.unwrap();
-        let w = maxx - minx;
+        let (minx, miny, _maxx, maxy) = board_bounds.unwrap();
         let h = maxy - miny;
         // Board label left column
         if let Some(b) = &p.board {
@@ -829,12 +833,32 @@ pub fn build_blueprint_svg(
             if let Some(ls) = &b.label_lines {
                 lines.extend(ls.iter().cloned());
             } else {
-                if let Some(lbl) = &b.label {
-                    lines.push(lbl.clone());
+                if let Some(lbl) = if is_en() {
+                    b.label_en.clone().or(b.label.clone())
+                } else {
+                    b.label_zh.clone().or(b.label.clone())
+                } {
+                    lines.push(lbl);
                 }
                 if let Some(pts) = &b.points {
                     for p in pts {
                         lines.push(format!("({},{})", fmt_mm(p[0]), fmt_mm(p[1])));
+                    }
+                } else if let Some(polys) = &b.polygons {
+                    for poly in polys {
+                        for p in poly {
+                            match p {
+                                PolygonPoint::Point([x, y]) | PolygonPoint::Rounded([x, y, _]) => {
+                                    lines.push(format!("({},{})", fmt_mm(*x), fmt_mm(*y)));
+                                }
+                            }
+                        }
+                        lines.push(String::from("--"));
+                    }
+                    if let Some(last) = lines.last()
+                        && last == "--"
+                    {
+                        lines.pop();
                     }
                 }
             }
@@ -854,8 +878,8 @@ pub fn build_blueprint_svg(
             }
         }
         let x_mm = x_sep2_mm + 2.0;
-        let g = translate_geom(&board_geom, -minx + x_mm, -miny + cursor_y_mm);
-        s.push_str(&path_from_points(&g, &to_px));
+        let g = translate_geoms(&board_geom, -minx + x_mm, -miny + cursor_y_mm);
+        s.push_str(&paths_from_geoms(&g, &to_px));
         cursor_y_mm += h + gap_mm;
         draw_hline(&mut s, cursor_y_mm);
     }
@@ -899,5 +923,16 @@ where
         out.push_str(&format!(" L {:.2} {:.2}", x, y));
     }
     out.push_str(" Z\"/>)\n");
+    out
+}
+
+fn paths_from_geoms<F>(geoms: &[Vec<Point>], to_px: &F) -> String
+where
+    F: Fn(Point) -> (f64, f64),
+{
+    let mut out = String::new();
+    for g in geoms {
+        out.push_str(&path_from_points(g, to_px));
+    }
     out
 }
