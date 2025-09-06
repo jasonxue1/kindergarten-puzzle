@@ -58,9 +58,6 @@ pub struct Board {
     pub type_: Option<String>,
     pub w: Option<f64>,
     pub h: Option<f64>,
-    pub r: Option<f64>,
-    pub cut_corner: Option<String>,
-    pub points: Option<Vec<[f64; 2]>>,
     pub polygons: Option<Vec<Vec<PolygonPoint>>>,
     pub label: Option<String>,
     pub label_en: Option<String>,
@@ -456,41 +453,6 @@ fn poly_to_points(poly: &[PolygonPoint]) -> Vec<Point> {
 
 fn board_to_geom(board: &Board) -> Option<Vec<Vec<Point>>> {
     match board.type_.as_deref() {
-        Some("rect_with_quarter_round_cut") => {
-            let w = board.w.unwrap_or(0.0);
-            let h = board.h.unwrap_or(0.0);
-            let r = board.r.unwrap_or(0.0);
-            let corner = board
-                .cut_corner
-                .clone()
-                .unwrap_or_else(|| "topright".to_string());
-            if corner == "topright" {
-                let cx = w - r;
-                let cy = h - r;
-                let n = 24;
-                let mut pts = vec![
-                    Point { x: 0.0, y: 0.0 },
-                    Point { x: w, y: 0.0 },
-                    Point { x: w, y: h - r },
-                ];
-                for i in 0..=n {
-                    let a = 0.0 + std::f64::consts::FRAC_PI_2 * (i as f64) / (n as f64);
-                    pts.push(Point {
-                        x: cx + r * a.cos(),
-                        y: cy + r * a.sin(),
-                    });
-                }
-                pts.push(Point { x: 0.0, y: h });
-                Some(vec![pts])
-            } else {
-                Some(vec![vec![
-                    Point { x: 0.0, y: 0.0 },
-                    Point { x: w, y: 0.0 },
-                    Point { x: w, y: h },
-                    Point { x: 0.0, y: h },
-                ]])
-            }
-        }
         Some("rect") => {
             let w = board.w.unwrap_or(0.0);
             let h = board.h.unwrap_or(0.0);
@@ -509,18 +471,7 @@ fn board_to_geom(board: &Board) -> Option<Vec<Vec<Point>>> {
                     .collect::<Vec<_>>();
                 if geoms.is_empty() { None } else { Some(geoms) }
             } else {
-                let pts = board
-                    .points
-                    .clone()
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(|v| Point { x: v[0], y: v[1] })
-                    .collect::<Vec<_>>();
-                if pts.is_empty() {
-                    None
-                } else {
-                    Some(vec![pts])
-                }
+                None
             }
         }
         _ => None,
@@ -840,11 +791,7 @@ pub fn build_blueprint_svg(
                 } {
                     lines.push(lbl);
                 }
-                if let Some(pts) = &b.points {
-                    for p in pts {
-                        lines.push(format!("({},{})", fmt_mm(p[0]), fmt_mm(p[1])));
-                    }
-                } else if let Some(polys) = &b.polygons {
+                if let Some(polys) = &b.polygons {
                     for poly in polys {
                         for p in poly {
                             match p {
