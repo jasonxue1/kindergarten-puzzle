@@ -54,6 +54,8 @@ pub struct Board {
     pub cut_corner: Option<String>,
     pub points: Option<Vec<[f64; 2]>>,
     pub label: Option<String>,
+    pub label_en: Option<String>,
+    pub label_zh: Option<String>,
     pub label_lines: Option<Vec<String>>,
 }
 
@@ -469,121 +471,7 @@ fn fmt_mm(v: f64) -> String {
             .to_string()
     }
 }
-fn label_for_piece(p: &Piece) -> String {
-    let f = |v: f64| -> String { fmt_mm(v) };
-    match p.type_.as_str() {
-        "circle" => {
-            let d = p.d.unwrap_or_else(|| p.r.unwrap_or(0.0) * 2.0);
-            if is_en() {
-                format!("Circle (diameter {} mm)", f(d))
-            } else {
-                format!("圆（直径 {}mm）", f(d))
-            }
-        }
-        "rect" => {
-            let w = p.w.unwrap_or(0.0);
-            let h = p.h.unwrap_or(0.0);
-            if (w - h).abs() < 1e-6 {
-                if is_en() {
-                    format!("Square (side {} mm)", f(w))
-                } else {
-                    format!("正方形（边长 {}mm）", f(w))
-                }
-            } else if is_en() {
-                format!("Rectangle ({}×{} mm)", f(w), f(h))
-            } else {
-                format!("长方形（{}×{}mm）", f(w), f(h))
-            }
-        }
-        "regular_polygon" => {
-            let n = p.n.unwrap_or(3);
-            let side = p.side.unwrap_or(0.0);
-            match n {
-                5 => {
-                    if is_en() {
-                        format!("Regular pentagon (side {} mm)", f(side))
-                    } else {
-                        format!("正五边形（边长 {}mm）", f(side))
-                    }
-                }
-                6 => {
-                    if is_en() {
-                        format!("Regular hexagon (side {} mm)", f(side))
-                    } else {
-                        format!("正六边形（边长 {}mm）", f(side))
-                    }
-                }
-                _ => {
-                    if is_en() {
-                        format!("Regular {}-gon (side {} mm)", n, f(side))
-                    } else {
-                        format!("正{}边形（边长 {}mm）", n, f(side))
-                    }
-                }
-            }
-        }
-        "equilateral_triangle" => {
-            if is_en() {
-                format!(
-                    "Equilateral triangle (side {} mm)",
-                    f(p.side.unwrap_or(0.0))
-                )
-            } else {
-                format!("正三角形（边长 {}mm）", f(p.side.unwrap_or(0.0)))
-            }
-        }
-        "right_triangle" => {
-            if is_en() {
-                format!(
-                    "Right triangle (legs {}×{} mm)",
-                    f(p.a.unwrap_or(0.0)),
-                    f(p.b.unwrap_or(0.0))
-                )
-            } else {
-                format!(
-                    "直角三角形（直角边 {}×{}mm）",
-                    f(p.a.unwrap_or(0.0)),
-                    f(p.b.unwrap_or(0.0))
-                )
-            }
-        }
-        "isosceles_trapezoid" => {
-            if is_en() {
-                format!(
-                    "Isosceles trapezoid (bottom {} mm, top {} mm, height {} mm)",
-                    f(p.base_bottom.unwrap_or(0.0)),
-                    f(p.base_top.unwrap_or(0.0)),
-                    f(p.height.unwrap_or(0.0))
-                )
-            } else {
-                format!(
-                    "等腰梯形（下底 {}mm，上底 {}mm，高 {}mm）",
-                    f(p.base_bottom.unwrap_or(0.0)),
-                    f(p.base_top.unwrap_or(0.0)),
-                    f(p.height.unwrap_or(0.0))
-                )
-            }
-        }
-        "parallelogram" => {
-            if is_en() {
-                format!(
-                    "Parallelogram (base {} mm, top offset {} mm, height {} mm)",
-                    f(p.base.unwrap_or(0.0)),
-                    f(p.offset_top.unwrap_or(0.0)),
-                    f(p.height.unwrap_or(0.0))
-                )
-            } else {
-                format!(
-                    "平行四边形（底 {}mm，顶边偏移 {}mm，高 {}mm）",
-                    f(p.base.unwrap_or(0.0)),
-                    f(p.offset_top.unwrap_or(0.0)),
-                    f(p.height.unwrap_or(0.0))
-                )
-            }
-        }
-        _ => p.type_.clone(),
-    }
-}
+
 fn label_from_catalog_only(p: &Piece) -> String {
     if let Some(id) = &p.id {
         let mut hit: Option<String> = None;
@@ -820,8 +708,7 @@ pub fn build_blueprint_svg(
     draw_hline(&mut s, pad_mm);
     let mut cursor_y_mm = pad_mm;
     if !board_geom.is_empty() {
-        let (minx, miny, maxx, maxy) = board_bounds.unwrap();
-        let w = maxx - minx;
+        let (minx, miny, _maxx, maxy) = board_bounds.unwrap();
         let h = maxy - miny;
         // Board label left column
         if let Some(b) = &p.board {
@@ -829,8 +716,12 @@ pub fn build_blueprint_svg(
             if let Some(ls) = &b.label_lines {
                 lines.extend(ls.iter().cloned());
             } else {
-                if let Some(lbl) = &b.label {
-                    lines.push(lbl.clone());
+                if let Some(lbl) = if is_en() {
+                    b.label_en.clone().or(b.label.clone())
+                } else {
+                    b.label_zh.clone().or(b.label.clone())
+                } {
+                    lines.push(lbl);
                 }
                 if let Some(pts) = &b.points {
                     for p in pts {
