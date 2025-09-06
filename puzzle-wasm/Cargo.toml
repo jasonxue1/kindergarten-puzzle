@@ -26,6 +26,7 @@ parry2d = "0.24"
 earcutr = "0.5"
 polyline = "0.11"
 geo-types = "0.7"
+geo = "0.31"
 
 [dependencies.web-sys]
 version = "0.3"
