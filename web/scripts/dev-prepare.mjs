@@ -1,4 +1,4 @@
-import { cp, mkdir, stat } from "node:fs/promises";
+import { cp, mkdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const cwd = process.cwd();
@@ -31,6 +31,13 @@ async function main() {
       await cp(a.src, a.dst);
     }
   }
+  // Ensure wasm bridge exists in public so App.tsx can load it without Vite bundling
+  const bridgePath = path.join(publicDir, "wasm-bridge.js");
+  await writeFile(
+    bridgePath,
+    "import init from './pkg/puzzle_wasm.js';\nwindow.__puzzleWasmInit = init;\n",
+    "utf8",
+  );
   const puzzleSrc = path.join(repoRoot, "puzzle");
   if (await exists(puzzleSrc)) {
     await cp(puzzleSrc, path.join(publicDir, "puzzle"), {

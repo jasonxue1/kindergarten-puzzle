@@ -30,13 +30,8 @@
             [
               wasm-pack
               just
-              python3
-              watchexec
               alejandra
               deadnix
-              nixd
-              clang
-              pkg-config
               taplo
               prettierd
               prettier

@@ -1,7 +1,9 @@
 [package]
 name = "blueprint-core"
 version = "0.1.0"
-edition = "2024"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
 
 [lib]
 name = "blueprint_core"

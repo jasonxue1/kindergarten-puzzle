@@ -7,8 +7,8 @@ use wasm_bindgen::prelude::*;
 use web_sys::{Document, Event, FileReader, HtmlInputElement, Window};
 
 use crate::{
-    CountsSpec, Puzzle, ShapesCatalog, State, assign_piece_colors, build_puzzle_from_counts, draw,
-    log, update_note_dom, update_status_dom,
+    CountsSpec, Puzzle, ShapesCatalog, State, asset_url, assign_piece_colors,
+    build_puzzle_from_counts, draw, log, update_note_dom, update_status_dom,
 };
 
 // Wires up the file input handler for loading JSON puzzle files.
@@ -54,7 +54,7 @@ pub fn attach_file_input(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
                         draw(&mut s);
                     }
                 } else if let Ok(spec) = serde_json::from_str::<CountsSpec>(&text) {
-                    // Fetch shapes file if provided; else fallback to bundled shapes
+                    // Fetch shapes file if provided; else try server shapes.json, fallback to bundled
                     let st3 = st2.clone();
                     let win: Window = st2.borrow().window.clone();
                     wasm_bindgen_futures::spawn_local(async move {
@@ -78,13 +78,39 @@ pub fn attach_file_input(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
                                 Err(_) => include_str!("../../shapes.json").to_string(),
                             }
                         } else {
-                            include_str!("../../shapes.json").to_string()
+                            // try base-prefixed then root, else fallback
+                            // asset_url uses window.__BASE_URL for deployments under subpaths
+                            let urls = [asset_url("shapes.json"), "/shapes.json".to_string()];
+                            let mut txt: Option<String> = None;
+                            for u in &urls {
+                                if let Ok(v) =
+                                    wasm_bindgen_futures::JsFuture::from(win.fetch_with_str(u))
+                                        .await
+                                {
+                                    if let Ok(resp) = v.dyn_into::<web_sys::Response>() {
+                                        if resp.ok() {
+                                            if let Ok(p) = resp.text() {
+                                                if let Ok(t) =
+                                                    wasm_bindgen_futures::JsFuture::from(p).await
+                                                {
+                                                    txt = t.as_string();
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                if txt.is_some() {
+                                    break;
+                                }
+                            }
+                            txt.unwrap_or_else(|| include_str!("../../shapes.json").to_string())
                         };
                         match serde_json::from_str::<ShapesCatalog>(&shapes_text) {
                             Ok(catalog) => {
                                 let p = build_puzzle_from_counts(&spec, &catalog);
                                 let mut s = st3.borrow_mut();
                                 s.data = p;
+                                s.shapes_catalog = Some(catalog);
                                 assign_piece_colors(&mut s.data);
                                 s.initial_data = s.data.clone();
                                 update_note_dom(&s);

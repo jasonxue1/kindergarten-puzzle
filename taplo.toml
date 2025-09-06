@@ -4,4 +4,5 @@ exclude = [
   "web/node_modules/**",
   "pkg/**",
   "**/target/**",
+  ".pnpm-store/**",
 ]
