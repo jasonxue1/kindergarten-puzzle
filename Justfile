@@ -19,7 +19,8 @@ build-dev:
 
 # Clean generated artifacts
 clean:
-    rm -rf {{ OUT_DIR }}
+    # Remove all files that are matched by .gitignore across the repo
+    git clean -fdX
 
 # Serve the app locally using pnpm (modern web UI)
 serve:
@@ -29,23 +30,7 @@ serve:
 watch:
     watchexec -e rs -w {{ CRATE_DIR }} -r -- just build
 
-# Export blueprint PNG from a JSON file
-
-# Usage: just png path/to/puzzle.json out.png [px_per_mm] [shapes.json]
-png json out="out.png" px_per_mm="6" shapes_path="":
-    out_path="{{ out }}"; \
-    rm -f "${out_path}"; \
-    if [ -n "{{ shapes_path }}" ]; then \
-      cargo run --release --manifest-path blueprint/Cargo.toml -- {{ json }} "${out_path}" {{ px_per_mm }} {{ shapes_path }}; \
-    else \
-      cargo run --release --manifest-path blueprint/Cargo.toml -- {{ json }} "${out_path}" {{ px_per_mm }}; \
-    fi
-
-# Export by id: reads puzzle/<id>.json to out.png
-
-# Usage: just png-id k11 out.png [px_per_mm]
-png-id id out="out.png" px_per_mm="6":
-    just png "puzzle/{{ id }}.json" "{{ out }}" {{ px_per_mm }}
+# CLI PNG export removed; use the web UI toolbar to export PNG.
 
 # Format all code and content
 fmt:

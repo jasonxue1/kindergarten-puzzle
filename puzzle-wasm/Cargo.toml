@@ -16,10 +16,14 @@ percent-encoding = "2"
 puzzle-core = { path = "../puzzle-core" }
 blueprint-core = { path = "../blueprint-core" }
 fonts = { path = "../fonts" }
-png = "0.17"
-usvg = "0.44"
-resvg = "0.44"
+usvg = "0.45"
+resvg = "0.45"
 tiny-skia = "0.11"
+rapier2d = { version = "0.29", default-features = true }
+parry2d = "0.24"
+earcutr = "0.5"
+polyline = "0.11"
+geo-types = "0.7"
 
 [dependencies.web-sys]
 version = "0.3"

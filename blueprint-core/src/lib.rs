@@ -1,3 +1,4 @@
+use png::{BitDepth, ColorType, Encoder};
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -139,6 +140,26 @@ fn rotate_point(p: Point, c: Point, ang: f64, flip: bool) -> Point {
         x: c.x + dx * ca - dy * s,
         y: c.y + dx * s + dy * ca,
     }
+}
+
+// Shared PNG encoder: RGBA -> PNG bytes (deterministic for same input)
+pub fn encode_rgba_to_png_bytes(
+    width: u32,
+    height: u32,
+    rgba: &[u8],
+) -> Result<Vec<u8>, png::EncodingError> {
+    let mut buf = Vec::new();
+    {
+        let mut enc = Encoder::new(&mut buf, width, height);
+        enc.set_color(ColorType::Rgba);
+        enc.set_depth(BitDepth::Eight);
+        {
+            let mut writer = enc.write_header()?;
+            writer.write_image_data(rgba)?;
+        }
+        // enc drops here, releasing the &mut buf borrow
+    }
+    Ok(buf)
 }
 fn piece_rotation(p: &Piece) -> f64 {
     p.rotation.unwrap_or(0.0)

@@ -7,6 +7,7 @@ import { TutorialModal } from "./Tutorial";
 // so Vite doesn't try to process it. See useEffect below.
 
 const App: React.FC = () => {
+  const [ready, setReady] = useState(false);
   const [lang, setLang] = useState<Lang>("en");
   const t = useMemo(() => strings[lang], [lang]);
   const [showChooser, setShowChooser] = useState<boolean>(() => {
@@ -21,29 +22,53 @@ const App: React.FC = () => {
   useEffect(() => {
     // Initialize the existing WASM app which expects specific element IDs present in the DOM.
     (async () => {
-      const base = import.meta.env.BASE_URL || "/";
-      // Expose base to WASM before it runs so relative fetches work in dev and prod
-      (window as any).__BASE_URL = base.endsWith("/") ? base : base + "/";
-      const wasmUrl = `${base}pkg/puzzle_wasm_bg.wasm`;
+      try {
+        const base = import.meta.env.BASE_URL || "/";
+        // Expose base to WASM before it runs so relative fetches work in dev and prod
+        (window as any).__BASE_URL = base.endsWith("/") ? base : base + "/";
+        const wasmUrl = `${base}pkg/puzzle_wasm_bg.wasm`;
 
-      // Load bridge module from public to avoid Vite processing of /public assets
-      async function ensureBridge(): Promise<void> {
-        if ((window as any).__puzzleWasmInit) return;
-        await new Promise<void>((resolve, reject) => {
-          const s = document.createElement("script");
-          s.type = "module";
-          s.src = `${base}wasm-bridge.js`;
-          s.onload = () => resolve();
-          s.onerror = () => reject(new Error("Failed to load wasm-bridge.js"));
-          document.head.appendChild(s);
-        });
+        // Load bridge module from public to avoid Vite processing of /public assets
+        async function ensureBridge(): Promise<void> {
+          if ((window as any).__puzzleWasmInit) return;
+          await new Promise<void>((resolve, reject) => {
+            const s = document.createElement("script");
+            s.type = "module";
+            s.src = `${base}wasm-bridge.js`;
+            s.onload = () => resolve();
+            s.onerror = () =>
+              reject(new Error("Failed to load wasm-bridge.js"));
+            document.head.appendChild(s);
+          });
+        }
+
+        await ensureBridge();
+        const init = (window as any).__puzzleWasmInit as (
+          u: string,
+        ) => Promise<any>;
+        await init(wasmUrl);
+        // Mark app as ready: show UI and remove loading overlay
+        document.documentElement.classList.add("app-ready");
+        const loading = document.getElementById("loading");
+        if (loading && loading.parentElement)
+          loading.parentElement.removeChild(loading);
+        setReady(true);
+      } catch (err) {
+        const el = document.getElementById("loadingText");
+        if (el) {
+          const zh = (
+            new URLSearchParams(location.search).get("lang") ||
+            navigator.language ||
+            "en"
+          )
+            .toLowerCase()
+            .startsWith("zh");
+          el.textContent = zh
+            ? "加载失败，请刷新或检查网络/WASM支持"
+            : "Failed to load. Please refresh or check network/WASM support.";
+        }
+        console.error(err);
       }
-
-      await ensureBridge();
-      const init = (window as any).__puzzleWasmInit as (
-        u: string,
-      ) => Promise<any>;
-      await init(wasmUrl);
     })();
   }, []);
 
@@ -90,7 +115,16 @@ const App: React.FC = () => {
   );
 
   return (
-    <div className="container">
+    <div
+      className="container"
+      aria-busy={!ready}
+      aria-hidden={!ready}
+      style={
+        !ready
+          ? { filter: "blur(2px)", pointerEvents: "none", userSelect: "none" }
+          : undefined
+      }
+    >
       <div className="card">
         <div id="bar">
           {/* First row: controls except speed */}

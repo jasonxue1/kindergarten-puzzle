@@ -3,7 +3,7 @@
 Rust + WASM puzzle viewer/editor for the browser, plus a Rust CLI that exports
 PNG blueprints from JSON specs.
 
-Web app: drag to move, Q/E rotate, F flip. Export PNG from the toolbar or via CLI.
+Web app: drag to move, Q/E rotate, F flip. Export PNG from the toolbar.
 Language: English by default, switchable to Chinese in the UI.
 
 ## Project Layout
