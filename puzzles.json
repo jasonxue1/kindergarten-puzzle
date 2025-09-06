@@ -18,5 +18,10 @@
     "id": "k12",
     "title": "k12",
     "path": "puzzle/k12.json"
+  },
+  {
+    "id": "k_double",
+    "title": "k_double",
+    "path": "puzzle/k_double.json"
   }
 ]

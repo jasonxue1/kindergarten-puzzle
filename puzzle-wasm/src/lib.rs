@@ -1,3 +1,5 @@
+#![allow(dead_code, clippy::all)]
+
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -72,6 +74,7 @@ struct Board {
     r: Option<f64>,
     cut_corner: Option<String>,
     points: Option<Vec<[f64; 2]>>,
+    polygons: Option<Vec<Vec<[f64; 2]>>>,
     // Optional labels for export (bilingual support)
     label: Option<String>,
     label_en: Option<String>,
@@ -129,6 +132,7 @@ struct Piece {
 struct Puzzle {
     units: Option<String>,
     board: Option<Board>,
+    #[serde(default)]
     pieces: Vec<Piece>,
     // Optional per-puzzle notes in two languages
     note_en: Option<String>,
@@ -827,8 +831,10 @@ fn update_validation_dom(state: &State) {
 
     if let Some(bg) = &board_geom {
         // helpers (containment check kept; distances via Parry)
-        let fully_inside =
-            |poly: &Vec<Point>| -> bool { poly.iter().all(|p| poly_contains_point(bg, *p)) };
+        let fully_inside = |poly: &Vec<Point>| -> bool {
+            poly.iter()
+                .all(|p| bg.iter().any(|g| poly_contains_point(g, *p)))
+        };
         // Compute min distance from piece to board edges using Parry contacts
         let min_dist_to_board =
             |poly: &Vec<Point>, is_circle: bool, radius: f64, ctr: Point| -> f64 {
@@ -842,22 +848,24 @@ fn update_validation_dom(state: &State) {
                     };
                     // Board segments live in world space; do NOT translate them.
                     let iso_seg = Isometry2::identity();
-                    let n = bg.len();
-                    for j in 0..n {
-                        let a = bg[j];
-                        let b = bg[(j + 1) % n];
-                        let seg = SharedShape::segment(
-                            Point2::new(a.x as Real, a.y as Real),
-                            Point2::new(b.x as Real, b.y as Real),
-                        );
-                        if let Ok(Some(ct)) = parry2d::query::contact(
-                            &iso_shape,
-                            sp.as_ref(),
-                            &iso_seg,
-                            seg.as_ref(),
-                            1.0e3 as Real,
-                        ) {
-                            best = best.min(ct.dist as f64);
+                    for g in bg {
+                        let n = g.len();
+                        for j in 0..n {
+                            let a = g[j];
+                            let b = g[(j + 1) % n];
+                            let seg = SharedShape::segment(
+                                Point2::new(a.x as Real, a.y as Real),
+                                Point2::new(b.x as Real, b.y as Real),
+                            );
+                            if let Ok(Some(ct)) = parry2d::query::contact(
+                                &iso_shape,
+                                sp.as_ref(),
+                                &iso_seg,
+                                seg.as_ref(),
+                                1.0e3 as Real,
+                            ) {
+                                best = best.min(ct.dist as f64);
+                            }
                         }
                     }
                 }
@@ -878,7 +886,8 @@ fn update_validation_dom(state: &State) {
             let d = min_dist_to_board(pg, *is_circle, *radius, *ctr);
             // Outer containment: if not fully inside outer, it's in the outer layer -> error
             let outside_outer = if let Some(out) = &outer {
-                !pg.iter().all(|p| poly_contains_point(out, *p))
+                !pg.iter()
+                    .all(|p| out.iter().any(|poly| poly_contains_point(poly, *p)))
             } else {
                 false
             };
@@ -1068,35 +1077,37 @@ fn locked_slide_delta_rapier(state: &State, moving_idx: usize, dx: f64, dy: f64)
     // per-piece fixed bodies where we need a translated collider (e.g., balls).
     let ground = bodies.insert(RigidBodyBuilder::fixed().build());
     if let Some(b) = &state.data.board {
-        if let Some(inner) = board_to_geom(b) {
-            let mut verts: Vec<Point2<Real>> = inner
-                .iter()
-                .map(|p| point![p.x as Real, p.y as Real])
-                .collect();
-            // Close the polyline to ensure the left edge is constrained
-            if !verts.is_empty() {
-                verts.push(verts[0]);
+        if let Some(inner_geoms) = board_to_geom(b) {
+            for inner in inner_geoms {
+                let mut verts: Vec<Point2<Real>> = inner
+                    .iter()
+                    .map(|p| point![p.x as Real, p.y as Real])
+                    .collect();
+                if !verts.is_empty() {
+                    verts.push(verts[0]);
+                }
+                let col = ColliderBuilder::polyline(verts, None)
+                    .friction(0.0)
+                    .restitution(0.0)
+                    .build();
+                colliders.insert_with_parent(col, ground, &mut bodies);
             }
-            let col = ColliderBuilder::polyline(verts, None)
-                .friction(0.0)
-                .restitution(0.0)
-                .build();
-            colliders.insert_with_parent(col, ground, &mut bodies);
         }
-        if let Some(outer) = board_outer_geom(b, RING_WIDTH_MM) {
-            let mut verts: Vec<Point2<Real>> = outer
-                .iter()
-                .map(|p| point![p.x as Real, p.y as Real])
-                .collect();
-            // Close the polyline to ensure the left edge is constrained
-            if !verts.is_empty() {
-                verts.push(verts[0]);
+        if let Some(outer_geoms) = board_outer_geom(b, RING_WIDTH_MM) {
+            for outer in outer_geoms {
+                let mut verts: Vec<Point2<Real>> = outer
+                    .iter()
+                    .map(|p| point![p.x as Real, p.y as Real])
+                    .collect();
+                if !verts.is_empty() {
+                    verts.push(verts[0]);
+                }
+                let col = ColliderBuilder::polyline(verts, None)
+                    .friction(0.0)
+                    .restitution(0.0)
+                    .build();
+                colliders.insert_with_parent(col, ground, &mut bodies);
             }
-            let col = ColliderBuilder::polyline(verts, None)
-                .friction(0.0)
-                .restitution(0.0)
-                .build();
-            colliders.insert_with_parent(col, ground, &mut bodies);
         }
     }
     for (j, pc) in state.data.pieces.iter().enumerate() {
@@ -1240,7 +1251,7 @@ fn rapier_allowed_delta(
     locked_slide_delta_rapier(state, moving_idx, dx, dy)
 }
 
-fn board_to_geom(board: &Board) -> Option<Vec<Point>> {
+fn board_to_geom(board: &Board) -> Option<Vec<Vec<Point>>> {
     match board.type_.as_deref() {
         Some("rect_with_quarter_round_cut") => {
             let w = board.w.unwrap_or(0.0);
@@ -1267,35 +1278,51 @@ fn board_to_geom(board: &Board) -> Option<Vec<Point>> {
                     });
                 }
                 pts.push(Point { x: 0.0, y: h });
-                Some(pts)
+                Some(vec![pts])
             } else {
-                Some(vec![
+                Some(vec![vec![
                     Point { x: 0.0, y: 0.0 },
                     Point { x: w, y: 0.0 },
                     Point { x: w, y: h },
                     Point { x: 0.0, y: h },
-                ])
+                ]])
             }
         }
         Some("rect") => {
             let w = board.w.unwrap_or(0.0);
             let h = board.h.unwrap_or(0.0);
-            Some(vec![
+            Some(vec![vec![
                 Point { x: 0.0, y: 0.0 },
                 Point { x: w, y: 0.0 },
                 Point { x: w, y: h },
                 Point { x: 0.0, y: h },
-            ])
+            ]])
         }
         Some("polygon") => {
-            let pts = board
-                .points
-                .clone()
-                .unwrap_or_default()
-                .into_iter()
-                .map(|v| Point { x: v[0], y: v[1] })
-                .collect::<Vec<_>>();
-            if pts.is_empty() { None } else { Some(pts) }
+            if let Some(polys) = &board.polygons {
+                let geoms = polys
+                    .iter()
+                    .map(|poly| {
+                        poly.iter()
+                            .map(|v| Point { x: v[0], y: v[1] })
+                            .collect::<Vec<_>>()
+                    })
+                    .collect::<Vec<_>>();
+                if geoms.is_empty() { None } else { Some(geoms) }
+            } else {
+                let pts = board
+                    .points
+                    .clone()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|v| Point { x: v[0], y: v[1] })
+                    .collect::<Vec<_>>();
+                if pts.is_empty() {
+                    None
+                } else {
+                    Some(vec![pts])
+                }
+            }
         }
         _ => None,
     }
@@ -1368,7 +1395,7 @@ fn rounded_rect_poly(w: f64, h: f64, r: f64, samples: usize) -> Vec<Point> {
     pts
 }
 
-fn board_outer_geom(board: &Board, ring: f64) -> Option<Vec<Point>> {
+fn board_outer_geom(board: &Board, ring: f64) -> Option<Vec<Vec<Point>>> {
     match board.type_.as_deref() {
         Some("rect_with_quarter_round_cut") => {
             // Exact outward offset of the special shape:
@@ -1407,12 +1434,12 @@ fn board_outer_geom(board: &Board, ring: f64) -> Option<Vec<Point>> {
                 x: -ring,
                 y: h + ring,
             });
-            Some(pts)
+            Some(vec![pts])
         }
         Some("rect") => {
             let w = board.w.unwrap_or(0.0);
             let h = board.h.unwrap_or(0.0);
-            Some(vec![
+            Some(vec![vec![
                 Point { x: -ring, y: -ring },
                 Point {
                     x: w + ring,
@@ -1426,22 +1453,33 @@ fn board_outer_geom(board: &Board, ring: f64) -> Option<Vec<Point>> {
                     x: -ring,
                     y: h + ring,
                 },
-            ])
+            ]])
         }
         Some("polygon") => {
-            // Rounded outward offset of the given polygon by `ring` using
-            // a simple parallel-edges + rounded-joins approximation.
-            let inner = board
-                .points
-                .clone()
-                .unwrap_or_default()
-                .into_iter()
-                .map(|v| Point { x: v[0], y: v[1] })
-                .collect::<Vec<_>>();
-            if inner.len() < 3 {
-                return None;
+            if let Some(polys) = &board.polygons {
+                let mut outs: Vec<Vec<Point>> = Vec::new();
+                for poly in polys {
+                    let inner: Vec<Point> =
+                        poly.iter().map(|v| Point { x: v[0], y: v[1] }).collect();
+                    if inner.len() >= 3 {
+                        outs.push(polygon_offset_rounded(&inner, ring, 8));
+                    }
+                }
+                if outs.is_empty() { None } else { Some(outs) }
+            } else {
+                let inner = board
+                    .points
+                    .clone()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|v| Point { x: v[0], y: v[1] })
+                    .collect::<Vec<_>>();
+                if inner.len() < 3 {
+                    None
+                } else {
+                    Some(vec![polygon_offset_rounded(&inner, ring, 8)])
+                }
             }
-            Some(polygon_offset_rounded(&inner, ring, 8))
         }
         _ => None,
     }
@@ -1579,30 +1617,29 @@ fn polygon_offset_rounded(inner: &[Point], r: f64, arc_samples: usize) -> Vec<Po
 fn draw_board(state: &mut State) {
     if let Some(b) = &state.data.board {
         let h = state.canvas.height() as f64;
-        if let Some(inner) = board_to_geom(b) {
-            // Outer rounded rectangle enclosing the inner with a ring width
-            let outer = board_outer_geom(b, RING_WIDTH_MM).unwrap_or_else(|| inner.clone());
-            // 1) Draw outer rounded rect as the middle ring color (coffee)
-            draw_colored_polygon(
-                &state.ctx,
-                h,
-                &outer,
-                false,
-                state.scale,
-                state.offset,
-                "#6f4e37",
-            );
-            // 2) Draw inner area fill to restore the center color (white)
-            draw_colored_polygon(
-                &state.ctx,
-                h,
-                &inner,
-                false,
-                state.scale,
-                state.offset,
-                "#ffffff",
-            );
-            // optional stroke
+        if let Some(inner_geoms) = board_to_geom(b) {
+            let outer_geoms =
+                board_outer_geom(b, RING_WIDTH_MM).unwrap_or_else(|| inner_geoms.clone());
+            for (inner, outer) in inner_geoms.iter().zip(outer_geoms.iter()) {
+                draw_colored_polygon(
+                    &state.ctx,
+                    h,
+                    outer,
+                    false,
+                    state.scale,
+                    state.offset,
+                    "#6f4e37",
+                );
+                draw_colored_polygon(
+                    &state.ctx,
+                    h,
+                    inner,
+                    false,
+                    state.scale,
+                    state.offset,
+                    "#ffffff",
+                );
+            }
             state.ctx.set_line_width(1.6);
             set_stroke_style(&state.ctx, "#222");
         }
@@ -2162,23 +2199,18 @@ fn export_png_blueprint(state: &State) -> Result<(), JsValue> {
     }
 
     // Build a PuzzleSpec (pieces-only), ignoring current poses to match CLI blueprint semantics
-    let board = state.data.board.clone().map(|b| {
-        // Choose label according to current language
-        let lbl = if state.lang == "zh" {
-            b.label_zh.clone().or(b.label.clone())
-        } else {
-            b.label_en.clone()
-        };
-        blueprint_core::Board {
-            type_: b.type_,
-            w: b.w,
-            h: b.h,
-            r: b.r,
-            cut_corner: b.cut_corner,
-            points: b.points,
-            label: lbl,
-            label_lines: b.label_lines,
-        }
+    let board = state.data.board.clone().map(|b| blueprint_core::Board {
+        type_: b.type_,
+        w: b.w,
+        h: b.h,
+        r: b.r,
+        cut_corner: b.cut_corner,
+        points: b.points,
+        polygons: b.polygons,
+        label: b.label,
+        label_en: b.label_en,
+        label_zh: b.label_zh,
+        label_lines: b.label_lines,
     });
     let pieces = state
         .data
@@ -2643,13 +2675,15 @@ fn update_viewport(state: &mut State) {
     let mut maxy = f64::NEG_INFINITY;
 
     if let Some(b) = &state.data.board
-        && let Some(geom) = board_to_geom(b)
+        && let Some(geoms) = board_to_geom(b)
     {
-        for p in geom {
-            minx = minx.min(p.x);
-            maxx = maxx.max(p.x);
-            miny = miny.min(p.y);
-            maxy = maxy.max(p.y);
+        for g in geoms {
+            for p in g {
+                minx = minx.min(p.x);
+                maxx = maxx.max(p.x);
+                miny = miny.min(p.y);
+                maxy = maxy.max(p.y);
+            }
         }
     }
     // Always include pieces in the bounds so off-board pieces remain visible
