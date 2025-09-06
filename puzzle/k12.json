@@ -3,21 +3,23 @@
   "board": {
     "type": "polygon",
     "points": [
-      [-57, -24],
-      [0, 0],
-      [57, -24],
-      [50, -70],
-      [0, -110],
-      [-50, -70]
+      [16, 0],
+      [98, 0],
+      [118, -17],
+      [118, -87],
+      [11, -87],
+      [11, -70],
+      [0, -53],
+      [0, -11],
+      [16, -11]
     ],
     "label_zh": "外框",
     "label_en": "Board"
   },
   "counts": {
-    "tri_eq_30": 2,
-    "para_45_15_30": 2,
-    "rt_30x60": 1,
-    "trap_60_30_30": 2
+    "circle_d30": 5,
+    "square_30": 3,
+    "tri_eq_30": 4
   },
   "note_zh": "请将所有拼块放入外框内，彼此不可重叠；允许留空，不必完全填满。",
   "note_en": "Place all pieces inside the frame. No overlaps. Leaving gaps is allowed."
