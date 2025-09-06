@@ -2,7 +2,7 @@ name: Build and Deploy Pages
 
 on:
   push:
-    branches: [main, dev]
+    branches: [main, dev, 'feat/**']
   pull_request:
 
 permissions:
@@ -18,7 +18,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      BASE_PATH: ${{ github.ref_name == 'dev' && '/dev/' || '/' }}
+      BRANCH_NAME: ${{ github.ref_name }}
+      BASE_PATH: ${{ github.ref_name == 'dev' && '/dev/' || startsWith(github.ref_name, 'feat/') && format('/{0}/', github.ref_name) || '/' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -75,10 +76,16 @@ jobs:
       - name: Prepare site for Pages
         run: |
           rm -rf dist
-          if [ "$BASE_PATH" = "/dev/" ]; then
-            deploy_dir="dist/dev"
-          else
+          branch="$BRANCH_NAME"
+          if [ "$branch" = "main" ]; then
             deploy_dir="dist"
+          elif [ "$branch" = "dev" ]; then
+            deploy_dir="dist/dev"
+          elif [[ "$branch" == feat/* ]]; then
+            deploy_dir="dist/$branch"
+          else
+            echo "Unsupported branch: $branch"
+            exit 1
           fi
           mkdir -p "$deploy_dir"
           # Copy Vite build
@@ -97,7 +104,7 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'dev')
+    if: github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'dev' || startsWith(github.ref_name, 'feat/'))
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
