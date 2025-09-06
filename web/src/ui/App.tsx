@@ -148,8 +148,8 @@ const App: React.FC = () => {
       if (cv.width !== targetW || cv.height !== targetH) {
         cv.width = targetW;
         cv.height = targetH;
-        // Notify WASM to redraw (Rust listens to window 'resize')
-        window.dispatchEvent(new Event("resize"));
+        // Notify WASM to redraw without causing recursive window resize events
+        window.dispatchEvent(new Event("canvas-resize"));
       }
     };
     const ro = new ResizeObserver(() => resize());

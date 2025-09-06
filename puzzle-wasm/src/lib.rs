@@ -2054,7 +2054,7 @@ fn attach_ui(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
 
     // Mouse wheel rotation removed by request
 
-    // Redraw on window resize (e.g., DPR or layout changes)
+    // Redraw when the JS frontend reports the canvas size changed
     {
         let st = state.clone();
         let onresize = Closure::<dyn FnMut(Event)>::wrap(Box::new(move |_e: Event| {
@@ -2065,7 +2065,7 @@ fn attach_ui(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
         state
             .borrow()
             .window
-            .add_event_listener_with_callback("resize", onresize.as_ref().unchecked_ref())?;
+            .add_event_listener_with_callback("canvas-resize", onresize.as_ref().unchecked_ref())?;
         onresize.forget();
     }
 
