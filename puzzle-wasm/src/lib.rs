@@ -1040,15 +1040,12 @@ fn locked_slide_delta_rapier(state: &State, moving_idx: usize, dx: f64, dy: f64)
     let ground = bodies.insert(RigidBodyBuilder::fixed().build());
     if let Some(b) = &state.data.board {
         if let Some(inner_geoms) = board_to_geom(b) {
+            let mut parts: Vec<(Isometry2<Real>, SharedShape)> = Vec::new();
             for inner in inner_geoms {
-                let mut verts: Vec<Point2<Real>> = inner
-                    .iter()
-                    .map(|p| point![p.x as Real, p.y as Real])
-                    .collect();
-                if !verts.is_empty() {
-                    verts.push(verts[0]);
-                }
-                let col = ColliderBuilder::polyline(verts, None)
+                build_capsule_obstacles(&inner, &mut parts);
+            }
+            if !parts.is_empty() {
+                let col = ColliderBuilder::compound(parts)
                     .friction(0.0)
                     .restitution(0.0)
                     .build();
@@ -1056,15 +1053,12 @@ fn locked_slide_delta_rapier(state: &State, moving_idx: usize, dx: f64, dy: f64)
             }
         }
         if let Some(outer_geoms) = board_outer_geom(b, RING_WIDTH_MM) {
+            let mut parts: Vec<(Isometry2<Real>, SharedShape)> = Vec::new();
             for outer in outer_geoms {
-                let mut verts: Vec<Point2<Real>> = outer
-                    .iter()
-                    .map(|p| point![p.x as Real, p.y as Real])
-                    .collect();
-                if !verts.is_empty() {
-                    verts.push(verts[0]);
-                }
-                let col = ColliderBuilder::polyline(verts, None)
+                build_capsule_obstacles(&outer, &mut parts);
+            }
+            if !parts.is_empty() {
+                let col = ColliderBuilder::compound(parts)
                     .friction(0.0)
                     .restitution(0.0)
                     .build();
@@ -1091,9 +1085,13 @@ fn locked_slide_delta_rapier(state: &State, moving_idx: usize, dx: f64, dy: f64)
         } else {
             let (og, _c) = piece_geom(pc);
             let hull = convex_hull(og);
-            let verts = to_na_points(&hull);
-            if let Some(builder) = ColliderBuilder::convex_hull(&verts) {
-                let col = builder.friction(0.0).restitution(0.0).build();
+            let mut parts: Vec<(Isometry2<Real>, SharedShape)> = Vec::new();
+            build_capsule_obstacles(&hull, &mut parts);
+            if !parts.is_empty() {
+                let col = ColliderBuilder::compound(parts)
+                    .friction(0.0)
+                    .restitution(0.0)
+                    .build();
                 colliders.insert_with_parent(col, ground, &mut bodies);
             }
         }
@@ -1121,13 +1119,21 @@ fn locked_slide_delta_rapier(state: &State, moving_idx: usize, dx: f64, dy: f64)
         colliders.insert_with_parent(col, dyn_h, &mut bodies);
     } else {
         let hull = convex_hull(geom);
-        let local: Vec<Point2<Real>> = hull
-            .iter()
-            .map(|p| Point2::new((p.x - ctr.x) as Real, (p.y - ctr.y) as Real))
-            .collect();
-        if let Some(builder) = ColliderBuilder::convex_hull(&local) {
-            let col = builder.friction(0.0).restitution(0.0).build();
+        if let Some(shape) = build_capsule_compound_local(&hull, ctr) {
+            let col = ColliderBuilder::new(shape)
+                .friction(0.0)
+                .restitution(0.0)
+                .build();
             colliders.insert_with_parent(col, dyn_h, &mut bodies);
+        } else {
+            let local: Vec<Point2<Real>> = hull
+                .iter()
+                .map(|p| Point2::new((p.x - ctr.x) as Real, (p.y - ctr.y) as Real))
+                .collect();
+            if let Some(builder) = ColliderBuilder::convex_hull(&local) {
+                let col = builder.friction(0.0).restitution(0.0).build();
+                colliders.insert_with_parent(col, dyn_h, &mut bodies);
+            }
         }
     }
     if let Some(rb) = bodies.get_mut(dyn_h) {

@@ -90,18 +90,18 @@ Recommended format for shareable puzzles. Example:
 ```json
 {
   "units": "mm",
-    "board": {
-      "type": "polygon",
-      "polygons": [
-        [
-          [0, 0],
-          [113, 0],
-          [113, 108],
-          [113, 123, 15],
-          [0, 123]
-        ]
+  "board": {
+    "type": "polygon",
+    "polygons": [
+      [
+        [0, 0],
+        [113, 0],
+        [113, 108],
+        [113, 123, 15],
+        [0, 123]
       ]
-     },
+    ]
+  },
   "counts": {
     "circle_d30": 1,
     "square_30": 1
