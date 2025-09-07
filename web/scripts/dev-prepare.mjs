@@ -5,14 +5,10 @@ const cwd = process.cwd();
 const repoRoot = path.resolve(cwd, "..");
 const publicDir = path.join(cwd, "public");
 
-async function exists(p) {
-  try {
-    await stat(p);
-    return true;
-  } catch {
-    return false;
-  }
-}
+const exists = (p) =>
+  stat(p)
+    .then(() => true)
+    .catch(() => false);
 
 async function main() {
   await mkdir(publicDir, { recursive: true });

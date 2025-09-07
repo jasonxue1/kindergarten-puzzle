@@ -30,7 +30,7 @@ pub struct State {
     pub shapes_catalog: Option<ShapesCatalog>,
 }
 
-/// Thread local storage for the single runtime state instance.
+// Thread local storage for the single runtime state instance.
 thread_local! {
     pub static STATE: RefCell<Option<Rc<RefCell<State>>>> = const { RefCell::new(None) };
 }

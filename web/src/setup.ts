@@ -19,18 +19,13 @@ import { strings, type Lang } from "./i18n";
   // Determine language and update head/loader text
   try {
     const params = new URLSearchParams(location.search);
-    let lang: Lang | undefined = undefined;
-    const q = params.get("lang");
-    if (q === "zh" || q === "en") lang = q;
-    if (!lang) {
-      const stored = localStorage.getItem("lang");
-      if (stored === "zh" || stored === "en") lang = stored as Lang;
-    }
-    if (!lang) {
-      lang = (navigator.language || "").toLowerCase().startsWith("zh")
-        ? "zh"
-        : "en";
-    }
+    const raw = params.get("lang") ?? localStorage.getItem("lang");
+    const lang: Lang =
+      raw === "zh" || raw === "en"
+        ? (raw as Lang)
+        : (navigator.language || "").toLowerCase().startsWith("zh")
+          ? "zh"
+          : "en";
     localStorage.setItem("lang", lang);
     document.documentElement.setAttribute("lang", lang);
     const t = strings[lang];

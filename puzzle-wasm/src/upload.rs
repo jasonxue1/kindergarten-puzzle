@@ -44,16 +44,13 @@ pub async fn load_puzzle_from_text(state: Rc<RefCell<State>>, text: String) {
             let urls = [asset_url("shapes.json"), "/shapes.json".to_string()];
             let mut txt: Option<String> = None;
             for u in &urls {
-                if let Ok(v) = wasm_bindgen_futures::JsFuture::from(win.fetch_with_str(u)).await {
-                    if let Ok(resp) = v.dyn_into::<web_sys::Response>() {
-                        if resp.ok() {
-                            if let Ok(p) = resp.text() {
-                                if let Ok(t) = wasm_bindgen_futures::JsFuture::from(p).await {
-                                    txt = t.as_string();
-                                }
-                            }
-                        }
-                    }
+                if let Ok(v) = wasm_bindgen_futures::JsFuture::from(win.fetch_with_str(u)).await
+                    && let Ok(resp) = v.dyn_into::<web_sys::Response>()
+                    && resp.ok()
+                    && let Ok(p) = resp.text()
+                    && let Ok(t) = wasm_bindgen_futures::JsFuture::from(p).await
+                {
+                    txt = t.as_string();
                 }
                 if txt.is_some() {
                     break;

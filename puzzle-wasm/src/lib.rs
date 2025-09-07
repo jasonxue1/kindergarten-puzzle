@@ -343,9 +343,9 @@ fn draw_colored_circle(
     ctx.close_path();
     ctx.set_line_width(1.6);
     set_fill_style(ctx, color);
-    let _ = ctx.fill();
+    ctx.fill();
     set_stroke_style(ctx, "#333");
-    let _ = ctx.stroke();
+    ctx.stroke();
 }
 
 // Optional helpers to serialize/deserialize proxy geometry using Google Polyline encoding.
@@ -619,7 +619,7 @@ fn update_validation_dom(state: &State) {
                             sp.as_ref(),
                             &iso_seg,
                             seg.as_ref(),
-                            1.0e3 as Real,
+                            1.0e3,
                         ) {
                             best = best.min(ct.dist as f64);
                         }
@@ -648,10 +648,7 @@ fn update_validation_dom(state: &State) {
             } else {
                 false
             };
-            if outside_outer {
-                errors_en.push(format!("Piece {} is outside the border", num));
-                errors_zh.push(format!("拼图 {} 在边框外部", num));
-            } else if d.is_finite() && d < -eps_mm {
+            if outside_outer || (d.is_finite() && d < -eps_mm) {
                 errors_en.push(format!("Piece {} is outside the border", num));
                 errors_zh.push(format!("拼图 {} 在边框外部", num));
             } else if !fully_inside(pg) {
@@ -816,7 +813,7 @@ fn locked_slide_delta_rapier(state: &State, moving_idx: usize, dx: f64, dy: f64)
 
     // Initialize a tiny world with zero gravity
     let mut pipeline = PhysicsPipeline::new();
-    let gravity = vector![0.0 as Real, 0.0 as Real];
+    let gravity = vector![0.0, 0.0];
     let mut islands = IslandManager::new();
     let mut broad_phase = BroadPhaseBvh::new();
     let mut narrow_phase = NarrowPhase::new();
@@ -825,8 +822,10 @@ fn locked_slide_delta_rapier(state: &State, moving_idx: usize, dx: f64, dy: f64)
     let mut impulse_joints = ImpulseJointSet::new();
     let mut multibody_joints = MultibodyJointSet::new();
     let mut ccd_solver = CCDSolver::new();
-    let mut params = IntegrationParameters::default();
-    params.dt = 1.0 as Real; // one step, velocity encodes full displacement
+    let params = IntegrationParameters {
+        dt: 1.0,
+        ..Default::default()
+    }; // one step, velocity encodes full displacement
 
     // Obstacles: other pieces as solid shapes (circles use balls; others convex hulls);
     // board as an inner/outer polyline barrier. Attach most to a shared ground body; create
@@ -894,7 +893,7 @@ fn locked_slide_delta_rapier(state: &State, moving_idx: usize, dx: f64, dy: f64)
     // Moving piece as a dynamic body with local convex hull and CCD
     let p = &state.data.pieces[moving_idx];
     let (geom, ctr) = piece_geom(p);
-    if geom.len() < 1 {
+    if geom.is_empty() {
         return (0.0, 0.0);
     }
     let start = vector![ctr.x as Real, ctr.y as Real];
@@ -932,7 +931,7 @@ fn locked_slide_delta_rapier(state: &State, moving_idx: usize, dx: f64, dy: f64)
     }
     if let Some(rb) = bodies.get_mut(dyn_h) {
         rb.set_linvel(vector![dx as Real, dy as Real], true);
-        rb.set_angvel(0.0 as Real, true);
+        rb.set_angvel(0.0, true);
     }
 
     // Run one step with CCD. No hooks / events.
@@ -2202,15 +2201,15 @@ fn update_viewport(state: &mut State) {
     let mut maxx = f64::NEG_INFINITY;
     let mut maxy = f64::NEG_INFINITY;
 
-    if let Some(b) = &state.data.board {
-        if let Some(geoms) = board_outer_geom(b, RING_WIDTH_MM).or_else(|| board_to_geom(b)) {
-            for g in geoms {
-                for p in g {
-                    minx = minx.min(p.x);
-                    maxx = maxx.max(p.x);
-                    miny = miny.min(p.y);
-                    maxy = maxy.max(p.y);
-                }
+    if let Some(b) = &state.data.board
+        && let Some(geoms) = board_outer_geom(b, RING_WIDTH_MM).or_else(|| board_to_geom(b))
+    {
+        for g in geoms {
+            for p in g {
+                minx = minx.min(p.x);
+                maxx = maxx.max(p.x);
+                miny = miny.min(p.y);
+                maxy = maxy.max(p.y);
             }
         }
     }
@@ -2244,7 +2243,7 @@ fn update_viewport(state: &mut State) {
     // Internal whitespace around the puzzle content (in canvas pixels),
     // scale with viewport (similar to CSS vmin-based padding)
     let vmin = canvas_w.min(canvas_h);
-    let margin = (vmin * 0.04).max(12.0).min(48.0);
+    let margin = (vmin * 0.04).clamp(12.0, 48.0);
     let scale_x = (canvas_w - 2.0 * margin) / w_mm;
     let scale_y = (canvas_h - 2.0 * margin) / h_mm;
     let scale = scale_x.min(scale_y).max(0.1);
