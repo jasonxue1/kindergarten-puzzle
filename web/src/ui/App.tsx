@@ -8,12 +8,12 @@ import React, {
 import { strings, type Lang } from "./i18n";
 import { ThemeToggle } from "./theme";
 import { TutorialModal } from "./Tutorial";
+import Home from "./Home";
 
 // WASM bootstrapping: we will dynamically import the wasm-pack JS from /public
 // so Vite doesn't try to process it. See useEffect below.
 
 const App: React.FC = () => {
-  const [ready, setReady] = useState(false);
   const [lang, setLang] = useState<Lang>(() => {
     try {
       const v = localStorage.getItem("lang");
@@ -21,14 +21,22 @@ const App: React.FC = () => {
     } catch {}
     return "en";
   });
+  useEffect(() => {
+    try {
+      localStorage.setItem("lang", lang);
+    } catch {}
+    document.documentElement.setAttribute("lang", lang);
+  }, [lang]);
   const t = useMemo(() => strings[lang], [lang]);
-  const [showChooser, setShowChooser] = useState<boolean>(() => {
-    const params = new URLSearchParams(location.search);
-    return !params.get("p");
-  });
-  const [puzzles, setPuzzles] = useState<
-    Array<{ id: string; title?: string; desc?: string }>
-  >([]);
+  const hasParamP = useMemo(
+    () => new URLSearchParams(location.search).get("p") != null,
+    [],
+  );
+  if (!hasParamP) {
+    return <Home lang={lang} setLang={setLang} />;
+  }
+
+  const [ready, setReady] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
 
   const syncLang = () => {
@@ -69,7 +77,8 @@ const App: React.FC = () => {
         const init = (window as any).__puzzleWasmInit as (
           u: string,
         ) => Promise<any>;
-        await init(wasmUrl);
+        const wasm = await init(wasmUrl);
+        (window as any).__puzzleWasm = wasm;
         // Mark app as ready: show UI and remove loading overlay
         document.documentElement.classList.add("app-ready");
         const loading = document.getElementById("loading");
@@ -79,18 +88,7 @@ const App: React.FC = () => {
         syncLang();
       } catch (err) {
         const el = document.getElementById("loadingText");
-        if (el) {
-          const zh = (
-            new URLSearchParams(location.search).get("lang") ||
-            navigator.language ||
-            "en"
-          )
-            .toLowerCase()
-            .startsWith("zh");
-          el.textContent = zh
-            ? "加载失败，请刷新或检查网络/WASM支持"
-            : "Failed to load. Please refresh or check network/WASM support.";
-        }
+        if (el) el.textContent = strings[lang].loadFailed;
         console.error(err);
       }
     })();
@@ -101,38 +99,17 @@ const App: React.FC = () => {
     syncLang();
   }, [lang]);
 
-  // Load chooser list when no ?p param
   useEffect(() => {
-    if (!showChooser) return;
-    let cancelled = false;
-    fetch("./puzzles.json")
-      .then((r) => (r.ok ? r.json() : []))
-      .then((list) => {
-        if (cancelled) return;
-        if (Array.isArray(list)) setPuzzles(list);
-      })
-      .catch(() => void 0);
-    return () => {
-      cancelled = true;
-    };
-  }, [showChooser]);
-
-  // Hide chooser when user selects a local JSON file (WASM handles loading)
-  useEffect(() => {
-    const onChange = (e: Event) => {
-      const target = e.target as HTMLElement | null;
-      if (target && target.id === "file") {
-        setShowChooser(false);
+    if (!ready) return;
+    const params = new URLSearchParams(location.search);
+    if (params.get("p") === "local") {
+      const txt = sessionStorage.getItem("uploadedPuzzle");
+      if (txt) {
+        (window as any).__puzzleWasm?.load_puzzle_from_text(txt);
+        sessionStorage.removeItem("uploadedPuzzle");
       }
-    };
-    document.addEventListener("change", onChange);
-    return () => document.removeEventListener("change", onChange);
-  }, []);
-
-  const hasParamP = useMemo(
-    () => new URLSearchParams(location.search).get("p") != null,
-    [],
-  );
+    }
+  }, [ready]);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const boardWrapRef = useRef<HTMLDivElement | null>(null);
@@ -357,76 +334,6 @@ const App: React.FC = () => {
             <ValidationPanel lang={lang} />
           </div>
         </div>
-        {showChooser && (
-          <div
-            className="scrim"
-            style={{
-              position: "fixed",
-              inset: 0,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              zIndex: 20,
-            }}
-          >
-            <div className="card" style={{ width: 520, padding: "20px 24px" }}>
-              <h2 style={{ margin: "0 0 12px 0" }}>Select a Puzzle</h2>
-              <ul className="chooser">
-                {puzzles.map((item) => (
-                  <li key={item.id}>
-                    <a
-                      href={`?p=${encodeURIComponent(item.id)}`}
-                      style={{ textDecoration: "none" }}
-                    >
-                      {item.title || item.id}
-                    </a>
-                    {item.desc && (
-                      <span
-                        style={{
-                          color: "inherit",
-                          opacity: 0.8,
-                          marginLeft: 6,
-                        }}
-                      >
-                        {" "}
-                        — {item.desc}
-                      </span>
-                    )}
-                  </li>
-                ))}
-                <li>
-                  <a
-                    href="#"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      const input = document.getElementById(
-                        "file",
-                      ) as HTMLInputElement | null;
-                      input?.click();
-                    }}
-                    style={{ textDecoration: "none" }}
-                  >
-                    Load local JSON…
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="puzzle/"
-                    target="_blank"
-                    style={{ textDecoration: "none" }}
-                  >
-                    Browse puzzle directory
-                  </a>
-                </li>
-                <li>
-                  <a href="./" style={{ textDecoration: "none" }}>
-                    Back to site root
-                  </a>
-                </li>
-              </ul>
-            </div>
-          </div>
-        )}
         {showTutorial && (
           <TutorialModal lang={lang} onClose={() => setShowTutorial(false)} />
         )}
@@ -439,8 +346,7 @@ export default App;
 
 const ValidationPanel: React.FC<{ lang: Lang }> = ({ lang }) => {
   const [open, setOpen] = useState(true);
-  const title = lang === "zh" ? "错误提示" : "Validation";
-  const success = lang === "zh" ? "成功" : "Success";
+  const t = strings[lang];
   return (
     <aside
       id="validationPanel"
@@ -455,24 +361,8 @@ const ValidationPanel: React.FC<{ lang: Lang }> = ({ lang }) => {
       >
         <button
           className="icon-btn"
-          aria-label={
-            open
-              ? lang === "zh"
-                ? "折叠"
-                : "Collapse"
-              : lang === "zh"
-                ? "展开"
-                : "Expand"
-          }
-          title={
-            open
-              ? lang === "zh"
-                ? "折叠"
-                : "Collapse"
-              : lang === "zh"
-                ? "展开"
-                : "Expand"
-          }
+          aria-label={open ? t.collapse : t.expand}
+          title={open ? t.collapse : t.expand}
           onClick={() => setOpen(!open)}
           style={{
             padding: 4,
@@ -484,7 +374,9 @@ const ValidationPanel: React.FC<{ lang: Lang }> = ({ lang }) => {
         >
           <span aria-hidden>{open ? "⟨" : "⟩"}</span>
         </button>
-        {open && <h3 style={{ margin: "0 0 0 8px", fontSize: 16 }}>{title}</h3>}
+        {open && (
+          <h3 style={{ margin: "0 0 0 8px", fontSize: 16 }}>{t.validation}</h3>
+        )}
       </div>
       {open && (
         <div
@@ -492,7 +384,7 @@ const ValidationPanel: React.FC<{ lang: Lang }> = ({ lang }) => {
           className="panel-body"
           style={{ padding: "8px 10px", fontSize: 14 }}
         >
-          <div style={{ opacity: 0.7 }}>{success}</div>
+          <div style={{ opacity: 0.7 }}>{t.success}</div>
         </div>
       )}
     </aside>

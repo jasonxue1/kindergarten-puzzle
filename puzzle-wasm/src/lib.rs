@@ -2315,6 +2315,17 @@ pub fn start() -> Result<(), JsValue> {
     Ok(())
 }
 
+#[wasm_bindgen]
+pub async fn load_puzzle_from_text(text: String) -> Result<(), JsValue> {
+    let state = STATE.with(|st| st.borrow().as_ref().cloned());
+    if let Some(st_rc) = state {
+        upload::load_puzzle_from_text(st_rc, text).await;
+        Ok(())
+    } else {
+        Err(JsValue::from_str("State not initialized"))
+    }
+}
+
 async fn fetch_and_load_puzzle(
     window: Window,
     document: Document,

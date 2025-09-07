@@ -25,6 +25,10 @@ async function main() {
       src: path.join(repoRoot, "shapes.json"),
       dst: path.join(publicDir, "shapes.json"),
     },
+    {
+      src: path.join(repoRoot, "LICENSE"),
+      dst: path.join(publicDir, "LICENSE"),
+    },
   ];
   for (const a of assets) {
     if (await exists(a.src)) {
