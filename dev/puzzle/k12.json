@@ -1,0 +1,25 @@
+{
+  "board": {
+    "type": "polygon",
+    "polygons": [
+      [
+        [16, 0],
+        [98, 0],
+        [118, -17],
+        [118, -87],
+        [11, -87],
+        [11, -70],
+        [0, -53],
+        [0, -11],
+        [16, -11]
+      ]
+    ]
+  },
+  "counts": {
+    "circle_d30": 5,
+    "square_30": 3,
+    "tri_eq_30": 4
+  },
+  "note_zh": "请将所有拼块放入外框内，彼此不可重叠；允许留空，不必完全填满。",
+  "note_en": "Place all pieces inside the frame. No overlaps. Leaving gaps is allowed."
+}
