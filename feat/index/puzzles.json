@@ -1,0 +1,27 @@
+[
+  {
+    "id": "k7",
+    "title": "k7",
+    "path": "puzzle/k7.json"
+  },
+  {
+    "id": "k10",
+    "title": "k10",
+    "path": "puzzle/k10.json"
+  },
+  {
+    "id": "k11",
+    "title": "k11",
+    "path": "puzzle/k11.json"
+  },
+  {
+    "id": "k12",
+    "title": "k12",
+    "path": "puzzle/k12.json"
+  },
+  {
+    "id": "k-double",
+    "title": "k-double",
+    "path": "puzzle/k-double.json"
+  }
+]
