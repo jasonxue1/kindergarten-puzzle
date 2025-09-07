@@ -21,9 +21,7 @@
         [120, -23],
         [133, -23]
       ]
-    ],
-    "label_zh": "外框",
-    "label_en": "Board"
+    ]
   },
   "counts": {
     "square_30": 2,

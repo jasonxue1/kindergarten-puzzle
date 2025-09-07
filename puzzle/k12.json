@@ -14,9 +14,7 @@
         [0, -11],
         [16, -11]
       ]
-    ],
-    "label_zh": "外框",
-    "label_en": "Board"
+    ]
   },
   "counts": {
     "circle_d30": 5,

@@ -74,10 +74,6 @@ struct Board {
     w: Option<f64>,
     h: Option<f64>,
     polygons: Option<Vec<Vec<PolygonPoint>>>,
-    // Optional labels for export (bilingual support)
-    label: Option<String>,
-    label_en: Option<String>,
-    label_zh: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -205,6 +201,7 @@ struct State {
     canvas: HtmlCanvasElement,
     ctx: CanvasRenderingContext2d,
     data: Puzzle,
+    puzzle_name: String,
     dragging_idx: Option<usize>,
     drag_off: (f64, f64), // screen-space offset from piece center
     // view transform
@@ -1974,9 +1971,6 @@ fn export_png_blueprint(state: &State) -> Result<(), JsValue> {
         w: b.w,
         h: b.h,
         polygons: b.polygons,
-        label: b.label,
-        label_en: b.label_en,
-        label_zh: b.label_zh,
     });
     let pieces = state
         .data
@@ -2005,8 +1999,26 @@ fn export_png_blueprint(state: &State) -> Result<(), JsValue> {
             points: p.points.clone(),
         })
         .collect::<Vec<_>>();
+    let note = {
+        let lang = state.lang.as_str();
+        if lang == "zh" {
+            state
+                .data
+                .note_zh
+                .clone()
+                .or_else(|| state.data.note_en.clone())
+        } else {
+            state
+                .data
+                .note_en
+                .clone()
+                .or_else(|| state.data.note_zh.clone())
+        }
+    };
     let spec = blueprint_core::PuzzleSpec {
         units: state.data.units.clone(),
+        title: Some(state.puzzle_name.clone()),
+        note,
         board,
         pieces: Some(pieces),
         parts: None,
@@ -2257,6 +2269,7 @@ pub fn start() -> Result<(), JsValue> {
         canvas,
         ctx,
         data,
+        puzzle_name: "k11".to_string(),
         dragging_idx: None,
         drag_off: (0.0, 0.0),
         scale: DEFAULT_MM2PX,
@@ -2347,6 +2360,7 @@ async fn fetch_and_load_puzzle(
         if let Some(st_rc) = st.borrow().as_ref() {
             let mut s = st_rc.borrow_mut();
             s.data = puzzle;
+            s.puzzle_name = name.to_string();
             assign_piece_colors(&mut s.data);
             s.initial_data = s.data.clone();
             update_note_dom(&s);

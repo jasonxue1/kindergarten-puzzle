@@ -59,9 +59,6 @@ pub struct Board {
     pub w: Option<f64>,
     pub h: Option<f64>,
     pub polygons: Option<Vec<Vec<PolygonPoint>>>,
-    pub label: Option<String>,
-    pub label_en: Option<String>,
-    pub label_zh: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -92,6 +89,8 @@ pub struct Piece {
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct PuzzleSpec {
     pub units: Option<String>,
+    pub title: Option<String>,
+    pub note: Option<String>,
     pub board: Option<Board>,
     pub pieces: Option<Vec<Piece>>,
     pub parts: Option<Vec<PartSpec>>,
@@ -477,6 +476,130 @@ fn board_to_geom(board: &Board) -> Option<Vec<Vec<Point>>> {
     }
 }
 
+#[derive(Clone)]
+struct Segment {
+    start: Point,
+    end: Point,
+    radius: Option<f64>,
+    center: Option<Point>,
+}
+
+fn polygon_segments(poly: &[PolygonPoint]) -> Vec<Segment> {
+    let n = poly.len();
+    if n == 0 {
+        return Vec::new();
+    }
+    let mut segs: Vec<Segment> = Vec::new();
+    let mut j: usize = 0;
+    let mut curr = match &poly[0] {
+        PolygonPoint::Point([x, y]) => Point { x: *x, y: *y },
+        PolygonPoint::Rounded([x, y, _]) => Point { x: *x, y: *y },
+    };
+    while j < n {
+        let next_idx = (j + 1) % n;
+        match &poly[next_idx] {
+            PolygonPoint::Point([x, y]) => {
+                let next = Point { x: *x, y: *y };
+                segs.push(Segment {
+                    start: curr,
+                    end: next,
+                    radius: None,
+                    center: None,
+                });
+                curr = next;
+                j += 1;
+            }
+            PolygonPoint::Rounded([x, y, r]) => {
+                let corner = Point { x: *x, y: *y };
+                let next2_idx = (j + 2) % n;
+                let next_xy = match &poly[next2_idx] {
+                    PolygonPoint::Point([nx, ny]) => Point { x: *nx, y: *ny },
+                    PolygonPoint::Rounded([nx, ny, _]) => Point { x: *nx, y: *ny },
+                };
+                let radius = *r;
+                let v1 = normalize(Point {
+                    x: curr.x - corner.x,
+                    y: curr.y - corner.y,
+                });
+                let v2 = normalize(Point {
+                    x: next_xy.x - corner.x,
+                    y: next_xy.y - corner.y,
+                });
+                let start = Point {
+                    x: corner.x + v1.x * radius,
+                    y: corner.y + v1.y * radius,
+                };
+                segs.push(Segment {
+                    start: curr,
+                    end: start,
+                    radius: None,
+                    center: None,
+                });
+                let end = Point {
+                    x: corner.x + v2.x * radius,
+                    y: corner.y + v2.y * radius,
+                };
+                let center = Point {
+                    x: corner.x + (v1.x + v2.x) * radius,
+                    y: corner.y + (v1.y + v2.y) * radius,
+                };
+                segs.push(Segment {
+                    start,
+                    end,
+                    radius: Some(radius),
+                    center: Some(center),
+                });
+                curr = end;
+                j += 1; // skip rounded point
+            }
+        }
+    }
+    segs
+}
+
+fn board_segments(board: &Board) -> Vec<Segment> {
+    match board.type_.as_deref() {
+        Some("rect") => {
+            let w = board.w.unwrap_or(0.0);
+            let h = board.h.unwrap_or(0.0);
+            vec![
+                Segment {
+                    start: Point { x: 0.0, y: 0.0 },
+                    end: Point { x: w, y: 0.0 },
+                    radius: None,
+                    center: None,
+                },
+                Segment {
+                    start: Point { x: w, y: 0.0 },
+                    end: Point { x: w, y: h },
+                    radius: None,
+                    center: None,
+                },
+                Segment {
+                    start: Point { x: w, y: h },
+                    end: Point { x: 0.0, y: h },
+                    radius: None,
+                    center: None,
+                },
+                Segment {
+                    start: Point { x: 0.0, y: h },
+                    end: Point { x: 0.0, y: 0.0 },
+                    radius: None,
+                    center: None,
+                },
+            ]
+        }
+        Some("polygon") => {
+            if let Some(polys) = &board.polygons {
+                polys.iter().flat_map(|p| polygon_segments(p)).collect()
+            } else {
+                Vec::new()
+            }
+        }
+        _ => Vec::new(),
+    }
+}
+
 fn translate_geom(pts: &[Point], dx: f64, dy: f64) -> Vec<Point> {
     pts.iter()
         .map(|p| Point {
@@ -700,6 +823,7 @@ pub fn build_blueprint_svg(
 
     let pad_mm = 5.0;
     let gap_mm = 8.0;
+    let title_h_mm = 20.0;
     let mut max_label_chars: usize = 0;
     let mut max_count_chars: usize = 0;
     for (label, items) in &groups {
@@ -712,8 +836,8 @@ pub fn build_blueprint_svg(
     let count_w_mm = count_w_px / px_per_mm;
     let board_w_mm = board_bounds.map(|b| b.2 - b.0).unwrap_or(120.0);
     let board_h_mm = board_bounds.map(|b| b.3 - b.1).unwrap_or(100.0);
-    let mut total_w_mm = (board_w_mm + label_w_mm + count_w_mm).max(160.0) + pad_mm * 2.0;
-    let mut total_h_mm = pad_mm + board_h_mm + pad_mm;
+    let mut table_w_mm = label_w_mm + count_w_mm;
+    let mut table_h_mm: f64 = 0.0;
     let mut row_heights: Vec<f64> = Vec::new();
     for (_label, items) in &groups {
         let mut row_w = label_w_mm + count_w_mm;
@@ -726,16 +850,44 @@ pub fn build_blueprint_svg(
             row_h = row_h.max(h);
         }
         row_heights.push(row_h);
-        total_w_mm = total_w_mm.max(pad_mm * 2.0 + row_w);
-        total_h_mm += row_h + gap_mm;
+        table_w_mm = table_w_mm.max(row_w);
+        table_h_mm += row_h + gap_mm;
     }
-    total_h_mm += pad_mm;
+    let content_w_mm = table_w_mm.max(board_w_mm);
+    let mut total_w_mm = content_w_mm + pad_mm * 2.0;
+    if total_w_mm < 160.0 + pad_mm * 2.0 {
+        total_w_mm = 160.0 + pad_mm * 2.0;
+    }
+    let board_gap_mm = 20.0;
+    let note_h_mm = p.note.as_ref().map(|_| 10.0).unwrap_or(0.0);
+    let note_gap_mm = if note_h_mm > 0.0 { 10.0 } else { 0.0 };
+
+    // Layout from bottom (y = 0) upwards
+    let mut cursor_mm = pad_mm; // bottom padding
+    let note_y_mm = if note_h_mm > 0.0 {
+        let y = cursor_mm + note_h_mm / 2.0;
+        cursor_mm += note_h_mm + note_gap_mm;
+        Some(y)
+    } else {
+        None
+    };
+    let board_top = cursor_mm;
+    if !board_geom.is_empty() {
+        cursor_mm += board_h_mm + board_gap_mm;
+    }
+    let table_top_mm = cursor_mm;
+    cursor_mm += table_h_mm + gap_mm;
+    let title_y_mm = cursor_mm + title_h_mm / 2.0;
+    cursor_mm += title_h_mm + pad_mm; // top padding
+    let total_h_mm = cursor_mm;
+
     let w_px = (total_w_mm * px_per_mm).ceil() as u32;
     let h_px = (total_h_mm * px_per_mm).ceil() as u32;
     let mut s = String::new();
     s.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
     s.push_str(&format!("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{}\" height=\"{}\" viewBox=\"0 0 {} {}\" stroke=\"#333\" fill=\"none\" stroke-width=\"1.8\" stroke-linejoin=\"round\" font-family=\"sans-serif\" font-size=\"26\">\n", w_px, h_px, w_px, h_px));
     s.push_str("<rect x=\"0\" y=\"0\" width=\"100%\" height=\"100%\" fill=\"#ffffff\"/>\n");
+    s.push_str("<defs><marker id=\"arrow\" viewBox=\"0 0 10 10\" refX=\"5\" refY=\"5\" markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\"><path d=\"M 0 0 L 10 5 L 0 10 z\" fill=\"#888\" /></marker></defs>\n");
     let mm2px = |x: f64| x * px_per_mm;
     let to_px = |p: Point| (mm2px(p.x), mm2px(total_h_mm - p.y));
     let x_sep1_mm = pad_mm + label_w_mm;
@@ -759,36 +911,26 @@ pub fn build_blueprint_svg(
             x0, y, x1, y
         ));
     };
-    draw_vline(&mut s, x_sep1_mm, pad_mm, total_h_mm - pad_mm);
-    draw_vline(&mut s, x_sep2_mm, pad_mm, total_h_mm - pad_mm);
-    draw_hline(&mut s, pad_mm);
-    let mut cursor_y_mm = pad_mm;
-    if !board_geom.is_empty() {
-        let (minx, miny, _maxx, maxy) = board_bounds.unwrap();
-        let h = maxy - miny;
-        // Board label left column
-        if let Some(b) = &p.board
-            && let Some(lbl) = if is_en() {
-                b.label_en.clone().or(b.label.clone())
-            } else {
-                b.label_zh.clone().or(b.label.clone())
-            }
-        {
-            let ly = mm2px(total_h_mm - (cursor_y_mm + h / 2.0));
-            s.push_str(&format!(
-                "<text x=\"{:.2}\" y=\"{:.2}\" fill=\"#333\" font-size=\"30\">{}</text>\n",
-                mm2px(pad_mm + 6.0),
-                ly,
-                svg_escape(&lbl)
-            ));
-        }
-        let x_mm = x_sep2_mm + 2.0;
-        let g = translate_geoms(&board_geom, -minx + x_mm, -miny + cursor_y_mm);
-        s.push_str(&paths_from_geoms(&g, &to_px));
-        cursor_y_mm += h + gap_mm;
-        draw_hline(&mut s, cursor_y_mm);
+    let table_bottom_mm =
+        table_top_mm + table_h_mm - if row_heights.is_empty() { 0.0 } else { gap_mm };
+    if !row_heights.is_empty() {
+        draw_vline(&mut s, x_sep1_mm, table_top_mm, table_bottom_mm);
+        draw_vline(&mut s, x_sep2_mm, table_top_mm, table_bottom_mm);
+        draw_hline(&mut s, table_top_mm);
     }
-    let mut row_top = cursor_y_mm;
+    if let Some(t) = &p.title {
+        let (tx, ty) = to_px(Point {
+            x: total_w_mm / 2.0,
+            y: title_y_mm,
+        });
+        s.push_str(&format!(
+            "<text x=\"{:.2}\" y=\"{:.2}\" text-anchor=\"middle\" fill=\"#333\" font-size=\"40\">{}</text>\n",
+            tx,
+            ty,
+            svg_escape(t)
+        ));
+    }
+    let mut row_top = table_top_mm;
     for ((label, items), row_h) in groups.into_iter().zip(row_heights.into_iter()) {
         s.push_str(&format!(
             "<text x=\"{:.2}\" y=\"{:.2}\" fill=\"#333\" font-size=\"26\">{}</text>\n",
@@ -807,8 +949,93 @@ pub fn build_blueprint_svg(
             s.push_str(&path_from_points(&g, &to_px));
             x_mm += w + gap_mm;
         }
-        row_top += row_h + gap_mm;
+        row_top += row_h;
         draw_hline(&mut s, row_top);
+        row_top += gap_mm;
+    }
+    if let Some(ny) = note_y_mm {
+        if let Some(txt) = &p.note {
+            let (tx, ty) = to_px(Point {
+                x: total_w_mm / 2.0,
+                y: ny,
+            });
+            s.push_str(&format!(
+                "<text x=\"{:.2}\" y=\"{:.2}\" text-anchor=\"middle\" fill=\"#333\" font-size=\"20\">{}</text>\n",
+                tx, ty, svg_escape(txt)
+            ));
+        }
+    }
+    if !board_geom.is_empty() {
+        let (minx, miny, _maxx, _maxy) = board_bounds.unwrap();
+        let x_mm = (total_w_mm - board_w_mm) / 2.0;
+        let g = translate_geoms(&board_geom, -minx + x_mm, -miny + board_top);
+        s.push_str(&paths_from_geoms(&g, &to_px));
+        if let Some(b) = &p.board {
+            let segs = board_segments(b);
+            for seg in segs {
+                let start = Point {
+                    x: seg.start.x - minx + x_mm,
+                    y: seg.start.y - miny + board_top,
+                };
+                let end = Point {
+                    x: seg.end.x - minx + x_mm,
+                    y: seg.end.y - miny + board_top,
+                };
+                if let Some(r) = seg.radius {
+                    if let Some(c) = seg.center {
+                        let cp = Point {
+                            x: c.x - minx + x_mm,
+                            y: c.y - miny + board_top,
+                        };
+                        let sp = start;
+                        let (cx, cy) = to_px(cp);
+                        let (sx, sy) = to_px(sp);
+                        s.push_str(&format!("<path d=\"M {:.2} {:.2} L {:.2} {:.2}\" stroke=\"#888\" stroke-width=\"1\" marker-end=\"url(#arrow)\"/>\n", cx, cy, sx, sy));
+                        let mid = Point {
+                            x: (cp.x + sp.x) / 2.0,
+                            y: (cp.y + sp.y) / 2.0,
+                        };
+                        let (tx, ty) = to_px(Point {
+                            x: mid.x + 3.0,
+                            y: mid.y,
+                        });
+                        s.push_str(&format!("<text x=\"{:.2}\" y=\"{:.2}\" fill=\"#333\" font-size=\"20\">R{:.0}</text>\n", tx, ty, r));
+                    }
+                } else {
+                    let dx = (end.x - start.x).abs();
+                    let dy = (end.y - start.y).abs();
+                    let offset = 3.0;
+                    if dx > 0.0 {
+                        let x1 = start.x.min(end.x);
+                        let x2 = start.x.max(end.x);
+                        let y = start.y.max(end.y) + offset;
+                        let (sx, sy) = to_px(Point { x: x1, y });
+                        let (ex, ey) = to_px(Point { x: x2, y });
+                        s.push_str(&format!("<path d=\"M {:.2} {:.2} L {:.2} {:.2}\" stroke=\"#888\" stroke-width=\"1\" marker-start=\"url(#arrow)\" marker-end=\"url(#arrow)\"/>\n", sx, sy, ex, ey));
+                        let mid = Point {
+                            x: (x1 + x2) / 2.0,
+                            y: y + 4.0,
+                        };
+                        let (tx, ty) = to_px(mid);
+                        s.push_str(&format!("<text x=\"{:.2}\" y=\"{:.2}\" text-anchor=\"middle\" fill=\"#333\" font-size=\"20\">{:.0}</text>\n", tx, ty, dx));
+                    }
+                    if dy > 0.0 {
+                        let y1 = start.y.min(end.y);
+                        let y2 = start.y.max(end.y);
+                        let x = start.x.max(end.x) + offset;
+                        let (sx, sy) = to_px(Point { x, y: y1 });
+                        let (ex, ey) = to_px(Point { x, y: y2 });
+                        s.push_str(&format!("<path d=\"M {:.2} {:.2} L {:.2} {:.2}\" stroke=\"#888\" stroke-width=\"1\" marker-start=\"url(#arrow)\" marker-end=\"url(#arrow)\"/>\n", sx, sy, ex, ey));
+                        let mid = Point {
+                            x: x + 4.0,
+                            y: (y1 + y2) / 2.0,
+                        };
+                        let (tx, ty) = to_px(mid);
+                        s.push_str(&format!("<text x=\"{:.2}\" y=\"{:.2}\" fill=\"#333\" font-size=\"20\">{:.0}</text>\n", tx, ty, dy));
+                    }
+                }
+            }
+        }
     }
     s.push_str("</svg>\n");
     (s, w_px, h_px)

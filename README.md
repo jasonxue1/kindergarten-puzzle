@@ -90,20 +90,18 @@ Recommended format for shareable puzzles. Example:
 ```json
 {
   "units": "mm",
-  "board": {
-    "type": "polygon",
-    "polygons": [
-      [
-        [0, 0],
-        [113, 0],
-        [113, 108],
-        [113, 123, 15],
-        [0, 123]
+    "board": {
+      "type": "polygon",
+      "polygons": [
+        [
+          [0, 0],
+          [113, 0],
+          [113, 108],
+          [113, 123, 15],
+          [0, 123]
+        ]
       ]
-    ],
-    "label_en": "Board 113×123 mm (R15)",
-    "label_zh": "外框 113×123mm（R15）"
-  },
+     },
   "counts": {
     "circle_d30": 1,
     "square_30": 1
@@ -125,8 +123,6 @@ rotations for interactive play.
 
 - Language: English default. Toggle to 中文 in the toolbar. Notes prefer
   `note_zh` when language is 中文, otherwise `note_en`.
-- Board label: export and any label usage pick `label_zh` for 中文 and
-  `label_en` for English.
 - Colors: a stable cycling palette is assigned deterministically by input order.
 
 ## Development
