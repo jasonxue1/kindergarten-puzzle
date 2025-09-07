@@ -9,6 +9,7 @@ import { strings, type Lang } from "../i18n";
 import { ThemeToggle } from "../theme/ThemeToggle";
 import { TutorModal } from "./TutorModal";
 import Home from "./Home";
+import { takeUploadedPuzzle } from "../utils/localFile";
 
 // WASM bootstrapping: we will dynamically import the wasm-pack JS from /public
 // so Vite doesn't try to process it. See useEffect below.
@@ -99,16 +100,14 @@ const App: React.FC = () => {
     syncLang();
   }, [lang]);
 
+  // When arriving from the landing page with an uploaded puzzle, forward the
+  // text to the WASM loader once it's ready.
   useEffect(() => {
     if (!ready) return;
-    const txt = sessionStorage.getItem("uploadedPuzzle");
+    const txt = takeUploadedPuzzle();
     if (txt) {
       (async () => {
-        try {
-          await (window as any).__puzzleWasm?.load_puzzle_from_text(txt);
-        } finally {
-          sessionStorage.removeItem("uploadedPuzzle");
-        }
+        await (window as any).__puzzleWasm?.load_puzzle_from_text(txt);
       })();
     }
   }, [ready]);

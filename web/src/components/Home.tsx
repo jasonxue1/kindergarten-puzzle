@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { strings, type Lang } from "../i18n";
 import { ThemeToggle } from "../theme/ThemeToggle";
-
 const Home: React.FC<{ lang: Lang; setLang: (lang: Lang) => void }> = ({
   lang,
   setLang,
@@ -71,34 +70,6 @@ const Home: React.FC<{ lang: Lang; setLang: (lang: Lang) => void }> = ({
                 <a href="./LICENSE" target="_blank" rel="noopener">
                   MIT License
                 </a>
-              </p>
-              <p style={{ margin: "0 0 20px" }}>
-                <input
-                  type="file"
-                  id="homeFile"
-                  accept=".json"
-                  style={{ display: "none" }}
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    const text = await file.text();
-                    sessionStorage.setItem("uploadedPuzzle", text);
-                    e.target.value = "";
-                    window.location.href = "./?p=local";
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={() =>
-                    (
-                      document.getElementById(
-                        "homeFile",
-                      ) as HTMLInputElement | null
-                    )?.click()
-                  }
-                >
-                  {t.loadLocal}
-                </button>
               </p>
               <h2 style={{ margin: "0 0 12px" }}>{t.selectPuzzle}</h2>
               <ul className="chooser">

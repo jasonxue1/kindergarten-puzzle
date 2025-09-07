@@ -1,11 +1,9 @@
-#![allow(dead_code, clippy::all)]
+#![allow(dead_code)]
 
 use std::cell::RefCell;
 use std::rc::Rc;
 
 use js_sys::Array;
-// png encoding moved to blueprint-core
-use serde::{Deserialize, Serialize};
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use web_sys::{
@@ -14,7 +12,6 @@ use web_sys::{
 };
 
 use blueprint_core::PolygonPoint;
-
 use earcutr::earcut;
 use geo_types::Coord as GeoCoord;
 use polyline as polyline_codec;
@@ -22,239 +19,29 @@ use rapier2d::na::{Isometry2, Point2};
 use rapier2d::prelude::*;
 
 mod canvas;
+mod constants;
+mod models;
+mod state;
 mod upload;
-
-const DEFAULT_MM2PX: f64 = 3.0;
-// Thickness of the virtual "frame" used for edge-edge contact in lock mode (in mm)
-const EDGE_RADIUS_MM: f64 = 0.05;
-// Visual/logic ring width for the board middle layer (mm)
-const RING_WIDTH_MM: f64 = 8.0;
-// Unified radius for circle pieces (mm)
-const CIRCLE_R_MM: f64 = 15.0;
-
-// Ensure the canvas backing store matches the CSS size and device pixel ratio
-// to prevent non-uniform stretching.
-fn sync_canvas_size(state: &mut State) {
-    let dpr = state.window.device_pixel_ratio();
-    let (css_w, css_h) = if let Some(el) = state.canvas.dyn_ref::<web_sys::Element>() {
-        let rect = el.get_bounding_client_rect();
-        (rect.width().max(1.0), rect.height().max(1.0))
-    } else {
-        (
-            state.canvas.client_width() as f64,
-            state.canvas.client_height() as f64,
-        )
-    };
-    let target_w = (css_w * dpr).round().clamp(1.0, 10000.0) as u32;
-    let target_h = (css_h * dpr).round().clamp(1.0, 10000.0) as u32;
-    if state.canvas.width() != target_w {
-        state.canvas.set_width(target_w);
-    }
-    if state.canvas.height() != target_h {
-        state.canvas.set_height(target_h);
-    }
-}
-
-#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
-struct Point {
-    x: f64,
-    y: f64,
-}
-
-impl From<(f64, f64)> for Point {
-    fn from(v: (f64, f64)) -> Self {
-        Point { x: v.0, y: v.1 }
-    }
-}
-
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-struct Board {
-    #[serde(rename = "type")]
-    type_: Option<String>,
-    w: Option<f64>,
-    h: Option<f64>,
-    polygons: Option<Vec<Vec<PolygonPoint>>>,
-}
-
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-struct Piece {
-    id: Option<String>,
-    #[serde(rename = "type")]
-    type_: String,
-    // common fields
-    at: Option<[f64; 2]>,
-    rotation: Option<f64>,
-    anchor: Option<String>,
-    flip: Option<bool>,
-    // rect
-    w: Option<f64>,
-    h: Option<f64>,
-    // equilateral_triangle
-    side: Option<f64>,
-    // right_triangle
-    a: Option<f64>,
-    b: Option<f64>,
-    // regular_polygon
-    n: Option<u32>,
-    // circle
-    d: Option<f64>,
-    r: Option<f64>,
-    // isosceles_trapezoid
-    base_bottom: Option<f64>,
-    base_top: Option<f64>,
-    height: Option<f64>,
-    // parallelogram
-    base: Option<f64>,
-    offset_top: Option<f64>,
-    // polygon
-    points: Option<Vec<[f64; 2]>>,
-
-    // cached runtime fields (not serialized)
-    #[serde(skip)]
-    __ctr: Option<Point>,
-    #[serde(skip)]
-    __geom: Option<Vec<Point>>, // for hit-testing
-    #[serde(skip)]
-    __geom_pl: Option<String>, // encoded polyline for debug/interop
-    #[serde(skip)]
-    __color_idx: Option<usize>, // stable color assignment
-    #[serde(skip)]
-    __label_idx: Option<usize>, // stable numeric label (0-based)
-}
-
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-struct Puzzle {
-    units: Option<String>,
-    board: Option<Board>,
-    #[serde(default)]
-    pieces: Vec<Piece>,
-    // Optional per-puzzle notes in two languages
-    note_en: Option<String>,
-    note_zh: Option<String>,
-}
-
-// Counts + shapes catalog for building a default puzzle without per-piece positions
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-struct PartSpec {
-    #[serde(rename = "type")]
-    type_: String,
-    count: u32,
-    w: Option<f64>,
-    h: Option<f64>,
-    side: Option<f64>,
-    a: Option<f64>,
-    b: Option<f64>,
-    n: Option<u32>,
-    d: Option<f64>,
-    r: Option<f64>,
-    base_bottom: Option<f64>,
-    base_top: Option<f64>,
-    height: Option<f64>,
-    base: Option<f64>,
-    offset_top: Option<f64>,
-    points: Option<Vec<[f64; 2]>>,
-}
-
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-struct ShapeDef {
-    id: String,
-    #[serde(rename = "type")]
-    type_: String,
-    w: Option<f64>,
-    h: Option<f64>,
-    side: Option<f64>,
-    a: Option<f64>,
-    b: Option<f64>,
-    n: Option<u32>,
-    d: Option<f64>,
-    r: Option<f64>,
-    base_bottom: Option<f64>,
-    base_top: Option<f64>,
-    height: Option<f64>,
-    base: Option<f64>,
-    offset_top: Option<f64>,
-    points: Option<Vec<[f64; 2]>>,
-    // Optional human labels (bilingual)
-    label: Option<String>,
-    label_en: Option<String>,
-    label_zh: Option<String>,
-}
-
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-struct ShapesCatalog {
-    shapes: Vec<ShapeDef>,
-}
-
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-struct CountsSpec {
-    units: Option<String>,
-    board: Option<Board>,
-    counts: std::collections::HashMap<String, u32>,
-    shapes_file: Option<String>,
-    note_en: Option<String>,
-    note_zh: Option<String>,
-}
-
-struct State {
-    window: Window,
-    document: Document,
-    canvas: HtmlCanvasElement,
-    ctx: CanvasRenderingContext2d,
-    data: Puzzle,
-    puzzle_name: String,
-    dragging_idx: Option<usize>,
-    drag_off: (f64, f64), // screen-space offset from piece center
-    // view transform
-    scale: f64,         // px per mm
-    offset: (f64, f64), // (ox, oy) in px from bottom-left
-    // continuous rotation control (deg per second, +ccw)
-    rot_vel: f64,
-    // speed control for Q/E
-    slow_mode: bool,     // false = fast, true = slow
-    rot_speed_fast: f64, // deg per second for fast mode
-    rot_speed_slow: f64, // deg per second for slow mode
-    // movement constraints
-    restrict_mode: bool, // L toggles: prevent overlaps with pieces/border while moving
-    shift_down: bool,    // temporary constraint while Shift held
-    // initial snapshot for reset
-    initial_data: Puzzle,
-    // UI language: "en" or "zh"
-    lang: String,
-    // Optional shapes catalog for label lookup during export
-    shapes_catalog: Option<ShapesCatalog>,
-}
-
-thread_local! {
-    static STATE: RefCell<Option<Rc<RefCell<State>>>> = const { RefCell::new(None) };
-}
-
-fn log(s: &str) {
-    web_sys::console::log_1(&JsValue::from_str(s));
-}
-
-fn to_screen(p: Point, canvas_h: f64, scale: f64, offset: (f64, f64)) -> (f64, f64) {
-    let (ox, oy) = offset;
-    (p.x * scale + ox, canvas_h - (p.y * scale + oy))
-}
-
-fn from_screen(x: f64, y: f64, canvas_h: f64, scale: f64, offset: (f64, f64)) -> Point {
-    let (ox, oy) = offset;
-    Point {
-        x: (x - ox) / scale,
-        y: (canvas_h - y - oy) / scale,
-    }
-}
+mod utils;
 
 use crate::canvas::{set_fill_style, set_stroke_style};
+use constants::*;
+use models::{Board, CountsSpec, Piece, Point as Pt, Puzzle, ShapeDef, ShapesCatalog};
+use state::{STATE, State};
+use utils::{
+    asset_url, fetch_text_with_fallbacks, from_screen, get_query_param, log, sync_canvas_size,
+    to_screen,
+};
 
-fn rotate_point(p: Point, c: Point, ang: f64, flip: bool) -> Point {
+fn rotate_point(p: Pt, c: Pt, ang: f64, flip: bool) -> Pt {
     let mut dx = p.x - c.x;
     let dy = p.y - c.y;
     if flip {
         dx = -dx;
     }
     let (s, ca) = ang.sin_cos();
-    Point {
+    Pt {
         x: c.x + dx * ca - dy * s,
         y: c.y + dx * s + dy * ca,
     }
@@ -267,11 +54,11 @@ fn piece_flip(p: &Piece) -> bool {
     p.flip.unwrap_or(false)
 }
 
-fn piece_geom(p: &Piece) -> (Vec<Point>, Point) {
+fn piece_geom(p: &Piece) -> (Vec<Pt>, Pt) {
     let rot = piece_rotation(p);
     let flip = piece_flip(p);
     let anchor = p.anchor.clone().unwrap_or_else(|| "bottomleft".to_string());
-    let apply = |pts: Vec<Point>, ctr: Point| -> (Vec<Point>, Point) {
+    let apply = |pts: Vec<Pt>, ctr: Pt| -> (Vec<Pt>, Pt) {
         let out = pts
             .into_iter()
             .map(|q| rotate_point(q, ctr, rot, flip))
@@ -284,26 +71,26 @@ fn piece_geom(p: &Piece) -> (Vec<Point>, Point) {
             let h = p.h.unwrap_or(0.0);
             let at = p.at.unwrap_or([0.0, 0.0]);
             let bl = if anchor == "center" {
-                Point {
+                Pt {
                     x: at[0] - w / 2.0,
                     y: at[1] - h / 2.0,
                 }
             } else {
-                Point { x: at[0], y: at[1] }
+                Pt { x: at[0], y: at[1] }
             };
-            let tl = Point {
+            let tl = Pt {
                 x: bl.x,
                 y: bl.y + h,
             };
-            let tr = Point {
+            let tr = Pt {
                 x: bl.x + w,
                 y: bl.y + h,
             };
-            let br = Point {
+            let br = Pt {
                 x: bl.x + w,
                 y: bl.y,
             };
-            let ctr = Point {
+            let ctr = Pt {
                 x: bl.x + w / 2.0,
                 y: bl.y + h / 2.0,
             };
@@ -314,23 +101,23 @@ fn piece_geom(p: &Piece) -> (Vec<Point>, Point) {
             let h = s * 3.0_f64.sqrt() / 2.0;
             let at = p.at.unwrap_or([0.0, 0.0]);
             let bl = if anchor == "center" {
-                Point {
+                Pt {
                     x: at[0] - s / 2.0,
                     y: at[1] - h / 3.0,
                 }
             } else {
-                Point { x: at[0], y: at[1] }
+                Pt { x: at[0], y: at[1] }
             };
-            let a = Point { x: bl.x, y: bl.y };
-            let b = Point {
+            let a = Pt { x: bl.x, y: bl.y };
+            let b = Pt {
                 x: bl.x + s,
                 y: bl.y,
             };
-            let c = Point {
+            let c = Pt {
                 x: bl.x + s / 2.0,
                 y: bl.y + h,
             };
-            let ctr = Point {
+            let ctr = Pt {
                 x: (a.x + b.x + c.x) / 3.0,
                 y: (a.y + b.y + c.y) / 3.0,
             };
@@ -338,16 +125,16 @@ fn piece_geom(p: &Piece) -> (Vec<Point>, Point) {
         }
         "right_triangle" => {
             let at = p.at.unwrap_or([0.0, 0.0]);
-            let a = Point { x: at[0], y: at[1] };
-            let b = Point {
+            let a = Pt { x: at[0], y: at[1] };
+            let b = Pt {
                 x: at[0] + p.a.unwrap_or(0.0),
                 y: at[1],
             };
-            let c = Point {
+            let c = Pt {
                 x: at[0],
                 y: at[1] + p.b.unwrap_or(0.0),
             };
-            let ctr = Point {
+            let ctr = Pt {
                 x: (a.x + b.x + c.x) / 3.0,
                 y: (a.y + b.y + c.y) / 3.0,
             };
@@ -358,7 +145,7 @@ fn piece_geom(p: &Piece) -> (Vec<Point>, Point) {
             let side = p.side.unwrap_or(0.0);
             let r = side / (2.0 * (std::f64::consts::PI / n as f64).sin());
             let at = p.at.unwrap_or([0.0, 0.0]);
-            let ctr = Point { x: at[0], y: at[1] };
+            let ctr = Pt { x: at[0], y: at[1] };
             let base_ang = piece_rotation(p)
                 + if piece_flip(p) {
                     std::f64::consts::PI
@@ -368,7 +155,7 @@ fn piece_geom(p: &Piece) -> (Vec<Point>, Point) {
             let mut pts = Vec::new();
             for i in 0..n {
                 let a = base_ang + (i as f64) * 2.0 * std::f64::consts::PI / (n as f64);
-                pts.push(Point {
+                pts.push(Pt {
                     x: ctr.x + r * a.cos(),
                     y: ctr.y + r * a.sin(),
                 });
@@ -379,7 +166,7 @@ fn piece_geom(p: &Piece) -> (Vec<Point>, Point) {
             // Use a polyline for computation/hit-testing; render as a true circle.
             let r = p.d.unwrap_or_else(|| p.r.unwrap_or(0.0) * 2.0) / 2.0;
             let at = p.at.unwrap_or([0.0, 0.0]);
-            let ctr = Point { x: at[0], y: at[1] };
+            let ctr = Pt { x: at[0], y: at[1] };
             let pts = tessellate_circle_polyline(ctr, r, 0.3);
             (pts, ctr)
         }
@@ -388,20 +175,20 @@ fn piece_geom(p: &Piece) -> (Vec<Point>, Point) {
             let b1 = p.base_top.unwrap_or(0.0);
             let h = p.height.unwrap_or(0.0);
             let at = p.at.unwrap_or([0.0, 0.0]);
-            let bl = Point { x: at[0], y: at[1] };
-            let br = Point {
+            let bl = Pt { x: at[0], y: at[1] };
+            let br = Pt {
                 x: bl.x + b0,
                 y: bl.y,
             };
-            let tl = Point {
+            let tl = Pt {
                 x: bl.x + (b0 - b1) / 2.0,
                 y: bl.y + h,
             };
-            let tr = Point {
+            let tr = Pt {
                 x: tl.x + b1,
                 y: tl.y,
             };
-            let ctr = Point {
+            let ctr = Pt {
                 x: (bl.x + br.x + tr.x + tl.x) / 4.0,
                 y: (bl.y + br.y + tr.y + tl.y) / 4.0,
             };
@@ -412,20 +199,20 @@ fn piece_geom(p: &Piece) -> (Vec<Point>, Point) {
             let h = p.height.unwrap_or(0.0);
             let off = p.offset_top.unwrap_or(0.0);
             let at = p.at.unwrap_or([0.0, 0.0]);
-            let bl = Point { x: at[0], y: at[1] };
-            let br = Point {
+            let bl = Pt { x: at[0], y: at[1] };
+            let br = Pt {
                 x: bl.x + b,
                 y: bl.y,
             };
-            let tl = Point {
+            let tl = Pt {
                 x: bl.x + off,
                 y: bl.y + h,
             };
-            let tr = Point {
+            let tr = Pt {
                 x: tl.x + b,
                 y: tl.y,
             };
-            let ctr = Point {
+            let ctr = Pt {
                 x: (bl.x + br.x + tr.x + tl.x) / 4.0,
                 y: (bl.y + br.y + tr.y + tl.y) / 4.0,
             };
@@ -437,20 +224,20 @@ fn piece_geom(p: &Piece) -> (Vec<Point>, Point) {
                 .clone()
                 .unwrap_or_default()
                 .into_iter()
-                .map(|v| Point { x: v[0], y: v[1] })
+                .map(|v| Pt { x: v[0], y: v[1] })
                 .collect::<Vec<_>>();
             let n = pts.len().max(1) as f64;
-            let ctr = pts.iter().fold(Point { x: 0.0, y: 0.0 }, |acc, q| Point {
+            let ctr = pts.iter().fold(Pt { x: 0.0, y: 0.0 }, |acc, q| Pt {
                 x: acc.x + q.x,
                 y: acc.y + q.y,
             });
-            let ctr = Point {
+            let ctr = Pt {
                 x: ctr.x / n,
                 y: ctr.y / n,
             };
             apply(pts, ctr)
         }
-        _ => (Vec::new(), Point { x: 0.0, y: 0.0 }),
+        _ => (Vec::new(), Pt { x: 0.0, y: 0.0 }),
     }
 }
 
@@ -512,7 +299,7 @@ fn draw(state: &mut State) {
 
 // Approximate a circle by a polyline with maximum sagitta error `max_err_mm`.
 // Returns vertices in CCW order.
-fn tessellate_circle_polyline(center: Point, r: f64, max_err_mm: f64) -> Vec<Point> {
+fn tessellate_circle_polyline(center: Pt, r: f64, max_err_mm: f64) -> Vec<Pt> {
     let r = r.max(0.0);
     if r <= 0.0 {
         return vec![center];
@@ -528,7 +315,7 @@ fn tessellate_circle_polyline(center: Point, r: f64, max_err_mm: f64) -> Vec<Poi
     let mut pts = Vec::with_capacity(n);
     for i in 0..n {
         let a = (i as f64) * 2.0 * std::f64::consts::PI / (n as f64);
-        pts.push(Point {
+        pts.push(Pt {
             x: center.x + r * a.cos(),
             y: center.y + r * a.sin(),
         });
@@ -539,7 +326,7 @@ fn tessellate_circle_polyline(center: Point, r: f64, max_err_mm: f64) -> Vec<Poi
 fn draw_colored_circle(
     ctx: &CanvasRenderingContext2d,
     canvas_h: f64,
-    center: Point,
+    center: Pt,
     r_mm: f64,
     scale: f64,
     offset: (f64, f64),
@@ -563,7 +350,7 @@ fn draw_colored_circle(
 
 // Optional helpers to serialize/deserialize proxy geometry using Google Polyline encoding.
 // We encode mm coordinates scaled by 1e3 (0.001mm precision) into Coord<f64>.
-fn encode_polyline_mm(pts: &[Point]) -> String {
+fn encode_polyline_mm(pts: &[Pt]) -> String {
     if pts.is_empty() {
         return String::new();
     }
@@ -578,12 +365,12 @@ fn encode_polyline_mm(pts: &[Point]) -> String {
     polyline_codec::encode_coordinates(coords, 0).unwrap_or_default()
 }
 
-fn decode_polyline_mm(s: &str) -> Vec<Point> {
+fn decode_polyline_mm(s: &str) -> Vec<Pt> {
     let scale = 1000.0;
     match polyline_codec::decode_polyline(s, 0) {
         Ok(coords) => coords
             .into_iter()
-            .map(|c| Point {
+            .map(|c| Pt {
                 x: c.x / scale,
                 y: c.y / scale,
             })
@@ -702,7 +489,7 @@ fn update_validation_dom(state: &State) {
 
     // Gather piece geoms with label index, whether it's a circle, its radius (if circle), and its center.
     // Circles use exact Ball(r) with translation for contact checks.
-    let mut geoms: Vec<(usize, Vec<Point>, bool, f64, Point)> = Vec::new();
+    let mut geoms: Vec<(usize, Vec<Pt>, bool, f64, Pt)> = Vec::new();
     for (i, p) in state.data.pieces.iter().enumerate() {
         let label_idx = p.__label_idx.unwrap_or(i);
         let is_circle = p.type_ == "circle";
@@ -726,7 +513,7 @@ fn update_validation_dom(state: &State) {
     let eps_mm: f64 = 0.10;
 
     // Helpers for Parry contact-based overlap with tolerance (handle concavity via earcut compound)
-    let make_shape = |poly: &Vec<Point>, is_circle: bool, radius: f64| -> Option<SharedShape> {
+    let make_shape = |poly: &Vec<Pt>, is_circle: bool, radius: f64| -> Option<SharedShape> {
         if is_circle {
             return Some(SharedShape::ball(radius as Real));
         }
@@ -753,35 +540,28 @@ fn update_validation_dom(state: &State) {
             Some(SharedShape::compound(parts))
         }
     };
-    let deep_overlap = |a: &Vec<Point>,
-                        ac: bool,
-                        ra: f64,
-                        ca: Point,
-                        b: &Vec<Point>,
-                        bc: bool,
-                        rb: f64,
-                        cb: Point|
-     -> bool {
-        if let (Some(sa), Some(sb)) = (make_shape(a, ac, ra), make_shape(b, bc, rb)) {
-            let ia = if ac {
-                Isometry2::new(vector![ca.x as Real, ca.y as Real], 0.0)
-            } else {
-                Isometry2::identity()
-            };
-            let ib = if bc {
-                Isometry2::new(vector![cb.x as Real, cb.y as Real], 0.0)
-            } else {
-                Isometry2::identity()
-            };
-            // If contact exists and distance < -eps => significant penetration
-            if let Ok(Some(ct)) =
-                parry2d::query::contact(&ia, sa.as_ref(), &ib, sb.as_ref(), eps_mm as Real)
-            {
-                return (ct.dist as f64) < -eps_mm;
+    let deep_overlap =
+        |a: &Vec<Pt>, ac: bool, ra: f64, ca: Pt, b: &Vec<Pt>, bc: bool, rb: f64, cb: Pt| -> bool {
+            if let (Some(sa), Some(sb)) = (make_shape(a, ac, ra), make_shape(b, bc, rb)) {
+                let ia = if ac {
+                    Isometry2::new(vector![ca.x as Real, ca.y as Real], 0.0)
+                } else {
+                    Isometry2::identity()
+                };
+                let ib = if bc {
+                    Isometry2::new(vector![cb.x as Real, cb.y as Real], 0.0)
+                } else {
+                    Isometry2::identity()
+                };
+                // If contact exists and distance < -eps => significant penetration
+                if let Ok(Some(ct)) =
+                    parry2d::query::contact(&ia, sa.as_ref(), &ib, sb.as_ref(), eps_mm as Real)
+                {
+                    return (ct.dist as f64) < -eps_mm;
+                }
             }
-        }
-        false
-    };
+            false
+        };
 
     // 1) Piece-piece overlaps (with tolerance)
     for a in 0..geoms.len() {
@@ -809,46 +589,45 @@ fn update_validation_dom(state: &State) {
 
     if let Some(bg) = &board_geom {
         // helpers (containment check kept; distances via Parry)
-        let fully_inside = |poly: &Vec<Point>| -> bool {
+        let fully_inside = |poly: &Vec<Pt>| -> bool {
             poly.iter()
                 .all(|p| bg.iter().any(|g| poly_contains_point(g, *p)))
         };
         // Compute min distance from piece to board edges using Parry contacts
-        let min_dist_to_board =
-            |poly: &Vec<Point>, is_circle: bool, radius: f64, ctr: Point| -> f64 {
-                let mut best = f64::INFINITY;
-                if let Some(sp) = make_shape(poly, is_circle, radius) {
-                    // Circle is defined at origin and needs translation; polygons are in world space.
-                    let iso_shape = if is_circle {
-                        Isometry2::new(vector![ctr.x as Real, ctr.y as Real], 0.0)
-                    } else {
-                        Isometry2::identity()
-                    };
-                    // Board segments live in world space; do NOT translate them.
-                    let iso_seg = Isometry2::identity();
-                    for g in bg {
-                        let n = g.len();
-                        for j in 0..n {
-                            let a = g[j];
-                            let b = g[(j + 1) % n];
-                            let seg = SharedShape::segment(
-                                Point2::new(a.x as Real, a.y as Real),
-                                Point2::new(b.x as Real, b.y as Real),
-                            );
-                            if let Ok(Some(ct)) = parry2d::query::contact(
-                                &iso_shape,
-                                sp.as_ref(),
-                                &iso_seg,
-                                seg.as_ref(),
-                                1.0e3 as Real,
-                            ) {
-                                best = best.min(ct.dist as f64);
-                            }
+        let min_dist_to_board = |poly: &Vec<Pt>, is_circle: bool, radius: f64, ctr: Pt| -> f64 {
+            let mut best = f64::INFINITY;
+            if let Some(sp) = make_shape(poly, is_circle, radius) {
+                // Circle is defined at origin and needs translation; polygons are in world space.
+                let iso_shape = if is_circle {
+                    Isometry2::new(vector![ctr.x as Real, ctr.y as Real], 0.0)
+                } else {
+                    Isometry2::identity()
+                };
+                // Board segments live in world space; do NOT translate them.
+                let iso_seg = Isometry2::identity();
+                for g in bg {
+                    let n = g.len();
+                    for j in 0..n {
+                        let a = g[j];
+                        let b = g[(j + 1) % n];
+                        let seg = SharedShape::segment(
+                            Point2::new(a.x as Real, a.y as Real),
+                            Point2::new(b.x as Real, b.y as Real),
+                        );
+                        if let Ok(Some(ct)) = parry2d::query::contact(
+                            &iso_shape,
+                            sp.as_ref(),
+                            &iso_seg,
+                            seg.as_ref(),
+                            1.0e3 as Real,
+                        ) {
+                            best = best.min(ct.dist as f64);
                         }
                     }
                 }
-                best
-            };
+            }
+            best
+        };
 
         // Also compute outer geometry for three-layer logic
         let outer = state
@@ -927,7 +706,7 @@ fn event_canvas_coords(e: &MouseEvent, cv: &HtmlCanvasElement) -> (f64, f64) {
 fn draw_colored_polygon(
     ctx: &CanvasRenderingContext2d,
     canvas_h: f64,
-    pts: &[Point],
+    pts: &[Pt],
     for_hit: bool,
     scale: f64,
     offset: (f64, f64),
@@ -960,7 +739,7 @@ fn draw_colored_polygon(
 
 // ---- Rapier/Parry helpers for smooth collision-aware translation ----
 
-fn convex_hull(mut pts: Vec<Point>) -> Vec<Point> {
+fn convex_hull(mut pts: Vec<Pt>) -> Vec<Pt> {
     // Monotone chain in f64
     if pts.len() <= 3 {
         return pts;
@@ -970,9 +749,8 @@ fn convex_hull(mut pts: Vec<Point>) -> Vec<Point> {
             .unwrap_or(std::cmp::Ordering::Equal)
             .then(a.y.partial_cmp(&b.y).unwrap_or(std::cmp::Ordering::Equal))
     });
-    let cross =
-        |o: &Point, a: &Point, b: &Point| (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
-    let mut lower: Vec<Point> = Vec::new();
+    let cross = |o: &Pt, a: &Pt, b: &Pt| (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+    let mut lower: Vec<Pt> = Vec::new();
     for p in &pts {
         while lower.len() >= 2 && cross(&lower[lower.len() - 2], &lower[lower.len() - 1], p) <= 0.0
         {
@@ -980,7 +758,7 @@ fn convex_hull(mut pts: Vec<Point>) -> Vec<Point> {
         }
         lower.push(*p);
     }
-    let mut upper: Vec<Point> = Vec::new();
+    let mut upper: Vec<Pt> = Vec::new();
     for p in pts.iter().rev() {
         while upper.len() >= 2 && cross(&upper[upper.len() - 2], &upper[upper.len() - 1], p) <= 0.0
         {
@@ -994,21 +772,21 @@ fn convex_hull(mut pts: Vec<Point>) -> Vec<Point> {
     lower
 }
 
-fn to_na_points(points: &[Point]) -> Vec<Point2<Real>> {
+fn to_na_points(points: &[Pt]) -> Vec<Point2<Real>> {
     points
         .iter()
         .map(|p| Point2::new(p.x as Real, p.y as Real))
         .collect()
 }
 
-fn to_na_points_local(points: &[Point], ctr: Point) -> Vec<Point2<Real>> {
+fn to_na_points_local(points: &[Pt], ctr: Pt) -> Vec<Point2<Real>> {
     points
         .iter()
         .map(|p| Point2::new((p.x - ctr.x) as Real, (p.y - ctr.y) as Real))
         .collect()
 }
 
-fn triangulate_polygon(points: &[Point]) -> Vec<[Point; 3]> {
+fn triangulate_polygon(points: &[Pt]) -> Vec<[Pt; 3]> {
     if points.len() < 3 {
         return Vec::new();
     }
@@ -1180,7 +958,7 @@ fn locked_slide_delta_rapier(state: &State, moving_idx: usize, dx: f64, dy: f64)
     (0.0, 0.0)
 }
 
-fn build_capsule_obstacles(points: &[Point], out: &mut Vec<(Isometry2<Real>, SharedShape)>) {
+fn build_capsule_obstacles(points: &[Pt], out: &mut Vec<(Isometry2<Real>, SharedShape)>) {
     if points.len() < 2 {
         return;
     }
@@ -1198,7 +976,7 @@ fn build_capsule_obstacles(points: &[Point], out: &mut Vec<(Isometry2<Real>, Sha
     }
 }
 
-fn build_capsule_compound_local(points: &[Point], ctr: Point) -> Option<SharedShape> {
+fn build_capsule_compound_local(points: &[Pt], ctr: Pt) -> Option<SharedShape> {
     if points.len() < 2 {
         return None;
     }
@@ -1235,26 +1013,26 @@ fn rapier_allowed_delta(
     locked_slide_delta_rapier(state, moving_idx, dx, dy)
 }
 
-fn normalize(p: Point) -> Point {
+fn normalize(p: Pt) -> Pt {
     let len = (p.x * p.x + p.y * p.y).sqrt();
     if len == 0.0 {
-        Point { x: 0.0, y: 0.0 }
+        Pt { x: 0.0, y: 0.0 }
     } else {
-        Point {
+        Pt {
             x: p.x / len,
             y: p.y / len,
         }
     }
 }
 
-fn poly_to_points(poly: &[PolygonPoint]) -> Vec<Point> {
-    let mut out: Vec<Point> = Vec::new();
+fn poly_to_points(poly: &[PolygonPoint]) -> Vec<Pt> {
+    let mut out: Vec<Pt> = Vec::new();
     let n = poly.len();
     let mut i = 0;
     while i < n {
         match &poly[i] {
             PolygonPoint::Point([x, y]) => {
-                out.push(Point { x: *x, y: *y });
+                out.push(Pt { x: *x, y: *y });
                 i += 1;
             }
             PolygonPoint::Rounded([x, y, r]) => {
@@ -1264,29 +1042,29 @@ fn poly_to_points(poly: &[PolygonPoint]) -> Vec<Point> {
                 }
                 let prev = *out.last().unwrap();
                 let next_xy = match &poly[i + 1] {
-                    PolygonPoint::Point([nx, ny]) => Point { x: *nx, y: *ny },
-                    PolygonPoint::Rounded([nx, ny, _]) => Point { x: *nx, y: *ny },
+                    PolygonPoint::Point([nx, ny]) => Pt { x: *nx, y: *ny },
+                    PolygonPoint::Rounded([nx, ny, _]) => Pt { x: *nx, y: *ny },
                 };
-                let corner = Point { x: *x, y: *y };
+                let corner = Pt { x: *x, y: *y };
                 let radius = *r;
-                let v1 = normalize(Point {
+                let v1 = normalize(Pt {
                     x: prev.x - corner.x,
                     y: prev.y - corner.y,
                 });
-                let v2 = normalize(Point {
+                let v2 = normalize(Pt {
                     x: next_xy.x - corner.x,
                     y: next_xy.y - corner.y,
                 });
-                let start = Point {
+                let start = Pt {
                     x: corner.x + v1.x * radius,
                     y: corner.y + v1.y * radius,
                 };
-                let end = Point {
+                let end = Pt {
                     x: corner.x + v2.x * radius,
                     y: corner.y + v2.y * radius,
                 };
                 out.push(start);
-                let center = Point {
+                let center = Pt {
                     x: corner.x + (v1.x + v2.x) * radius,
                     y: corner.y + (v1.y + v2.y) * radius,
                 };
@@ -1296,7 +1074,7 @@ fn poly_to_points(poly: &[PolygonPoint]) -> Vec<Point> {
                 for j in 1..=steps {
                     let t = j as f64 / steps as f64;
                     let ang = start_ang + (end_ang - start_ang) * t;
-                    out.push(Point {
+                    out.push(Pt {
                         x: center.x + radius * ang.cos(),
                         y: center.y + radius * ang.sin(),
                     });
@@ -1308,16 +1086,16 @@ fn poly_to_points(poly: &[PolygonPoint]) -> Vec<Point> {
     out
 }
 
-fn board_to_geom(board: &Board) -> Option<Vec<Vec<Point>>> {
+fn board_to_geom(board: &Board) -> Option<Vec<Vec<Pt>>> {
     match board.type_.as_deref() {
         Some("rect") => {
             let w = board.w.unwrap_or(0.0);
             let h = board.h.unwrap_or(0.0);
             Some(vec![vec![
-                Point { x: 0.0, y: 0.0 },
-                Point { x: w, y: 0.0 },
-                Point { x: w, y: h },
-                Point { x: 0.0, y: h },
+                Pt { x: 0.0, y: 0.0 },
+                Pt { x: w, y: 0.0 },
+                Pt { x: w, y: h },
+                Pt { x: 0.0, y: h },
             ]])
         }
         Some("polygon") => {
@@ -1335,22 +1113,22 @@ fn board_to_geom(board: &Board) -> Option<Vec<Vec<Point>>> {
     }
 }
 
-fn board_outer_geom(board: &Board, ring: f64) -> Option<Vec<Vec<Point>>> {
+fn board_outer_geom(board: &Board, ring: f64) -> Option<Vec<Vec<Pt>>> {
     match board.type_.as_deref() {
         Some("rect") => {
             let w = board.w.unwrap_or(0.0);
             let h = board.h.unwrap_or(0.0);
             Some(vec![vec![
-                Point { x: -ring, y: -ring },
-                Point {
+                Pt { x: -ring, y: -ring },
+                Pt {
                     x: w + ring,
                     y: -ring,
                 },
-                Point {
+                Pt {
                     x: w + ring,
                     y: h + ring,
                 },
-                Point {
+                Pt {
                     x: -ring,
                     y: h + ring,
                 },
@@ -1358,7 +1136,7 @@ fn board_outer_geom(board: &Board, ring: f64) -> Option<Vec<Vec<Point>>> {
         }
         Some("polygon") => {
             if let Some(polys) = &board.polygons {
-                let mut outs: Vec<Vec<Point>> = Vec::new();
+                let mut outs: Vec<Vec<Pt>> = Vec::new();
                 for poly in polys {
                     let inner = poly_to_points(poly);
                     if inner.len() >= 3 {
@@ -1374,7 +1152,7 @@ fn board_outer_geom(board: &Board, ring: f64) -> Option<Vec<Vec<Point>>> {
     }
 }
 
-fn polygon_offset_rounded(inner: &[Point], r: f64, _arc_samples: usize) -> Vec<Point> {
+fn polygon_offset_rounded(inner: &[Pt], r: f64, _arc_samples: usize) -> Vec<Pt> {
     use geo::algorithm::buffer::Buffer;
     use geo::{Coord, LineString, Polygon};
 
@@ -1387,11 +1165,11 @@ fn polygon_offset_rounded(inner: &[Point], r: f64, _arc_samples: usize) -> Vec<P
     let poly = Polygon::new(LineString::from(coords), vec![]);
     let mp = poly.buffer(r);
     let poly = mp.0.into_iter().next().unwrap();
-    let mut out: Vec<Point> = poly
+    let mut out: Vec<Pt> = poly
         .exterior()
         .0
         .iter()
-        .map(|c| Point { x: c.x, y: c.y })
+        .map(|c| Pt { x: c.x, y: c.y })
         .collect();
     if out.len() > 1 {
         let first = out.first().unwrap();
@@ -1437,7 +1215,7 @@ fn draw_board(state: &mut State) {
 
 fn point_in_polygon(
     pt: (f64, f64),
-    poly: &[Point],
+    poly: &[Pt],
     canvas_h: f64,
     scale: f64,
     offset: (f64, f64),
@@ -1463,7 +1241,7 @@ fn point_in_polygon(
     inside
 }
 
-fn poly_contains_point(poly: &[Point], p: Point) -> bool {
+fn poly_contains_point(poly: &[Pt], p: Pt) -> bool {
     let (x, y) = (p.x, p.y);
     let mut inside = false;
     let n = poly.len();
@@ -1483,8 +1261,8 @@ fn poly_contains_point(poly: &[Point], p: Point) -> bool {
     inside
 }
 
-fn segments_intersect(a1: Point, a2: Point, b1: Point, b2: Point) -> bool {
-    fn cross(a: Point, b: Point, c: Point) -> f64 {
+fn segments_intersect(a1: Pt, a2: Pt, b1: Pt, b2: Pt) -> bool {
+    fn cross(a: Pt, b: Pt, c: Pt) -> f64 {
         (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)
     }
     let d1 = cross(a1, a2, b1);
@@ -1499,7 +1277,7 @@ fn segments_intersect(a1: Point, a2: Point, b1: Point, b2: Point) -> bool {
     false
 }
 
-fn polygons_intersect(a: &[Point], b: &[Point]) -> bool {
+fn polygons_intersect(a: &[Pt], b: &[Pt]) -> bool {
     if a.is_empty() || b.is_empty() {
         return false;
     }
@@ -1776,7 +1554,7 @@ fn attach_ui(state: Rc<RefCell<State>>) -> Result<(), JsValue> {
                     && point_in_polygon(pt, geom, h, s.scale, s.offset)
                 {
                     s.dragging_idx = Some(i);
-                    let ctr = s.data.pieces[i].__ctr.unwrap_or(Point { x: 0.0, y: 0.0 });
+                    let ctr = s.data.pieces[i].__ctr.unwrap_or(Pt { x: 0.0, y: 0.0 });
                     let (sx, sy) = to_screen(ctr, h, s.scale, s.offset);
                     s.drag_off = (pt.0 - sx, pt.1 - sy);
                     // bring to top
@@ -2239,7 +2017,7 @@ fn build_puzzle_from_counts(spec: &CountsSpec, catalog: &ShapesCatalog) -> Puzzl
     }
 }
 
-fn bounds_of_points(pts: &[Point]) -> (f64, f64, f64, f64) {
+fn bounds_of_points(pts: &[Pt]) -> (f64, f64, f64, f64) {
     let mut minx = f64::INFINITY;
     let mut miny = f64::INFINITY;
     let mut maxx = f64::NEG_INFINITY;
@@ -2267,16 +2045,18 @@ pub fn start() -> Result<(), JsValue> {
     if let Ok(search) = window.location().search() {
         if let Some(p) = get_query_param(&search, "p") {
             puzzle_name = p.clone();
-            let win = window.clone();
-            let doc = document.clone();
-            let cv = canvas.clone();
-            let ctx2 = ctx.clone();
-            let p_clone = p.clone();
-            wasm_bindgen_futures::spawn_local(async move {
-                if let Err(err) = fetch_and_load_puzzle(win, doc, cv, ctx2, &p_clone).await {
-                    log(&format!("Failed to load puzzle '{}': {:?}", p_clone, err));
-                }
-            });
+            if p != "local" {
+                let win = window.clone();
+                let doc = document.clone();
+                let cv = canvas.clone();
+                let ctx2 = ctx.clone();
+                let p_clone = p.clone();
+                wasm_bindgen_futures::spawn_local(async move {
+                    if let Err(err) = fetch_and_load_puzzle(win, doc, cv, ctx2, &p_clone).await {
+                        log(&format!("Failed to load puzzle '{}': {:?}", p_clone, err));
+                    }
+                });
+            }
         } else {
             let win = window.clone();
             let doc = document.clone();
@@ -2411,76 +2191,6 @@ async fn fetch_and_load_puzzle(
         }
     });
     Ok(())
-}
-
-fn asset_url(path: &str) -> String {
-    // Use a base prefix provided by the host page via window.__BASE_URL if present,
-    // else default to "/". If the input is an absolute URL or already starts with
-    // the base, return as-is.
-    let p = path.trim();
-    if p.starts_with("http://") || p.starts_with("https://") || p.starts_with("data:") {
-        return p.to_string();
-    }
-    // Read base from window
-    let base = web_sys::window()
-        .and_then(|w| {
-            let v = js_sys::Reflect::get(&w, &JsValue::from_str("__BASE_URL")).ok()?;
-            v.as_string()
-        })
-        .unwrap_or_else(|| "/".to_string());
-    let base = if base.ends_with('/') {
-        base
-    } else {
-        format!("{}/", base)
-    };
-    let p = p.trim_start_matches('/');
-    format!("{}{}", base, p)
-}
-
-async fn fetch_text_with_fallbacks(window: &Window, urls: &[&str]) -> Option<String> {
-    for url in urls {
-        let resp_value =
-            match wasm_bindgen_futures::JsFuture::from(window.fetch_with_str(url)).await {
-                Ok(v) => v,
-                Err(_) => continue,
-            };
-        let resp: web_sys::Response = match resp_value.dyn_into() {
-            Ok(r) => r,
-            Err(_) => continue,
-        };
-        if !resp.ok() {
-            continue;
-        }
-        if let Ok(text_promise) = resp.text()
-            && let Ok(text_js) = wasm_bindgen_futures::JsFuture::from(text_promise).await
-            && let Some(s) = text_js.as_string()
-        {
-            return Some(s);
-        }
-    }
-    None
-}
-
-fn get_query_param(search: &str, key: &str) -> Option<String> {
-    // naive parser for ?a=b&c=d
-    let s = search.trim_start_matches('?');
-    for pair in s.split('&') {
-        let mut it = pair.splitn(2, '=');
-        let k = it.next()?;
-        let v = it.next().unwrap_or("");
-        if k == key {
-            return Some(url_decode(v));
-        }
-    }
-    None
-}
-
-fn url_decode(s: &str) -> String {
-    // fallback if decode_uri_component not used; replace + with space and percent-decode best-effort
-    let s = s.replace('+', " ");
-    percent_encoding::percent_decode_str(&s)
-        .decode_utf8_lossy()
-        .to_string()
 }
 
 fn update_viewport(state: &mut State) {

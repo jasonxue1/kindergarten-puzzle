@@ -6,9 +6,11 @@ use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::*;
 use web_sys::{Document, Event, FileReader, HtmlInputElement, Window};
 
+use crate::models::{CountsSpec, Puzzle, ShapesCatalog};
+use crate::state::State;
+use crate::utils::{asset_url, log};
 use crate::{
-    CountsSpec, Puzzle, ShapesCatalog, State, asset_url, assign_piece_colors,
-    build_puzzle_from_counts, draw, log, update_note_dom, update_status_dom,
+    assign_piece_colors, build_puzzle_from_counts, draw, update_note_dom, update_status_dom,
 };
 
 // Shared loader for puzzle JSON text (counts format or full puzzle)
