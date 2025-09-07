@@ -2,10 +2,10 @@
   "units": "mm",
   "board": {
     "type": "rect",
-    "w": 125,
+    "w": 127,
     "h": 99,
-    "label_zh": "外框 125×99mm",
-    "label_en": "Board 125×99mm"
+    "label_zh": "外框 127×99mm",
+    "label_en": "Board 127×99mm"
   },
   "counts": {
     "square_30": 1,
