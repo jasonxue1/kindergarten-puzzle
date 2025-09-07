@@ -82,28 +82,6 @@ pub struct Puzzle {
     pub note_zh: Option<String>,
 }
 
-/// Counts + shapes catalog for building a default puzzle without per-piece positions.
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-pub struct PartSpec {
-    #[serde(rename = "type")]
-    pub type_: String,
-    pub count: u32,
-    pub w: Option<f64>,
-    pub h: Option<f64>,
-    pub side: Option<f64>,
-    pub a: Option<f64>,
-    pub b: Option<f64>,
-    pub n: Option<u32>,
-    pub d: Option<f64>,
-    pub r: Option<f64>,
-    pub base_bottom: Option<f64>,
-    pub base_top: Option<f64>,
-    pub height: Option<f64>,
-    pub base: Option<f64>,
-    pub offset_top: Option<f64>,
-    pub points: Option<Vec<[f64; 2]>>,
-}
-
 /// Shape metadata used when building puzzles from counts specs.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct ShapeDef {

@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -363,20 +361,6 @@ fn encode_polyline_mm(pts: &[Pt]) -> String {
         })
         .collect();
     polyline_codec::encode_coordinates(coords, 0).unwrap_or_default()
-}
-
-fn decode_polyline_mm(s: &str) -> Vec<Pt> {
-    let scale = 1000.0;
-    match polyline_codec::decode_polyline(s, 0) {
-        Ok(coords) => coords
-            .into_iter()
-            .map(|c| Pt {
-                x: c.x / scale,
-                y: c.y / scale,
-            })
-            .collect(),
-        Err(_) => Vec::new(),
-    }
 }
 
 fn piece_color(i: usize) -> String {
@@ -773,13 +757,6 @@ fn to_na_points(points: &[Pt]) -> Vec<Point2<Real>> {
     points
         .iter()
         .map(|p| Point2::new(p.x as Real, p.y as Real))
-        .collect()
-}
-
-fn to_na_points_local(points: &[Pt], ctr: Pt) -> Vec<Point2<Real>> {
-    points
-        .iter()
-        .map(|p| Point2::new((p.x - ctr.x) as Real, (p.y - ctr.y) as Real))
         .collect()
 }
 

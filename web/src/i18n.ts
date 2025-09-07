@@ -36,7 +36,7 @@ export const strings = {
       title: "Tutorial",
       close: "Close",
       lines: [
-        "Controls: drag with mouse; Q/E rotate; F flip; L lock; S toggle fast/slow mode.",
+        "Controls: drag with mouse; Q/E rotate; F flip; L lock; S toggle fast/slow mode; Shift temp lock.",
         "Adjustments: the two sliders set fast and slow rotation speeds.",
       ],
     },
@@ -76,7 +76,7 @@ export const strings = {
       title: "教程 / 快速上手",
       close: "关闭",
       lines: [
-        "按键说明：鼠标拖动，Q/E 旋转，F 翻转，L 锁定，S 切换快/慢模式。",
+        "按键说明：鼠标拖动，Q/E 旋转，F 翻转，L 锁定，S 切换快/慢模式，按住 Shift 临时锁定。",
         "调整说明：两个速度调节条分别控制快/慢旋转速度。",
       ],
     },
