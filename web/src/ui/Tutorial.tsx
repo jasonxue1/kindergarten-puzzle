@@ -137,13 +137,13 @@ export const TutorialModal: React.FC<{
             </li>
             <li style={{ padding: "6px 0" }}>
               {isZh
-                ? "下载 PNG：导出蓝图风格的 PNG。"
-                : "Download PNG: Export a blueprint‑style PNG."}
+                ? "下载蓝图：导出蓝图风格的 PNG。"
+                : "Download Blueprint: Export a blueprint‑style PNG."}
             </li>
             <li style={{ padding: "6px 0" }}>
               {isZh
-                ? "打开 JSON：加载本地拼图 JSON 文件。"
-                : "Open JSON: Load a local puzzle JSON file."}
+                ? "加载本地 JSON：加载本地拼图 JSON 文件。"
+                : "Load JSON: Load a local puzzle JSON file."}
             </li>
             <li style={{ padding: "6px 0" }}>
               {isZh
@@ -171,8 +171,8 @@ export const TutorialModal: React.FC<{
             </li>
             <li style={{ padding: "6px 0" }}>
               {isZh
-                ? "也可通过“打开 JSON”导入本地拼图文件（支持完整 puzzle 或 counts+shapes 格式）。"
-                : "You can also ‘Open JSON’ to import a local puzzle file (supports full puzzle or counts+shapes format)."}
+                ? "也可通过“加载 JSON”导入本地拼图文件（支持完整 puzzle 或 counts+shapes 格式）。"
+                : "You can also ‘Load JSON’ to import a local puzzle file (supports full puzzle or counts+shapes format)."}
             </li>
           </ul>
         </section>

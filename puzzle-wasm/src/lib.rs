@@ -2071,7 +2071,8 @@ fn export_png_blueprint(state: &State) -> Result<(), JsValue> {
     let url = Url::create_object_url_with_blob(&blob)?;
     let a = document.create_element("a")?.dyn_into::<HtmlElement>()?;
     a.set_attribute("href", &url)?;
-    a.set_attribute("download", "puzzle_blueprint.png")?;
+    let fname = format!("{}-blueprint-{}.png", state.puzzle_name, state.lang);
+    a.set_attribute("download", &fname)?;
     a.click();
     Url::revoke_object_url(&url)?;
     Ok(())

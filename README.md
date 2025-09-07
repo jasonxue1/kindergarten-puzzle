@@ -3,7 +3,7 @@
 Interactive, browser‑based puzzle viewer/editor.
 Data lives in JSON files (`shapes.json` + `puzzle/*.json`).
 The app is bilingual (English/中文), and the browser loads `shapes.json`
-directly from the repo at runtime. No local PNG export is required.
+directly from the repo at runtime. No local blueprint PNG export is required.
 
 Controls: drag to move, Q/E rotate, F flip.
 Language can be switched in the UI.
@@ -12,7 +12,7 @@ Language can be switched in the UI.
 
 - `shapes.json`: Shape catalog (mm units).
   Only `label_en` and `label_zh` are used.
-- `puzzle/`: Puzzle specs (counts + board). Notes are `note_en`/`note_zh`.
+- `puzzle/`: Puzzle specs (counts + board; units default to mm). Notes are `note_en`/`note_zh`.
 - `puzzle-wasm/`: Rust crate compiled to WebAssembly
   (runtime + physics + UI glue).
 - `puzzle-core/`: Shared Rust code for the web runtime.
@@ -85,11 +85,10 @@ Types include `rect`, `equilateral_triangle`, `right_triangle`,
 
 ### puzzle/`<id>`.json (counts + board)
 
-Recommended format for shareable puzzles. Example:
+Recommended format for shareable puzzles. Units default to millimeters. Example:
 
 ```json
 {
-  "units": "mm",
   "board": {
     "type": "polygon",
     "polygons": [

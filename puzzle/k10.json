@@ -1,5 +1,4 @@
 {
-  "units": "mm",
   "board": {
     "type": "rect",
     "w": 128,

@@ -204,7 +204,7 @@ const App: React.FC = () => {
                 />
                 <button
                   className="icon-btn"
-                  title={lang === "zh" ? "打开本地JSON" : "Open local JSON"}
+                  title={t.loadLocal}
                   onClick={() =>
                     (
                       document.getElementById("file") as HTMLInputElement | null
@@ -214,7 +214,7 @@ const App: React.FC = () => {
                   <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
                     <path d="M19 13H5v-2h14v2zm-7-9l-5 5h3v6h4V9h3l-5-5z" />
                   </svg>
-                  <span>{lang === "zh" ? "打开本地JSON" : "Open JSON"}</span>
+                  <span>{t.loadLocal}</span>
                 </button>
                 <button
                   id="tutorBtn"
