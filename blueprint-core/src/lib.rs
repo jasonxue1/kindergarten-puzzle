@@ -953,17 +953,15 @@ pub fn build_blueprint_svg(
         draw_hline(&mut s, row_top);
         row_top += gap_mm;
     }
-    if let Some(ny) = note_y_mm {
-        if let Some(txt) = &p.note {
-            let (tx, ty) = to_px(Point {
-                x: total_w_mm / 2.0,
-                y: ny,
-            });
-            s.push_str(&format!(
-                "<text x=\"{:.2}\" y=\"{:.2}\" text-anchor=\"middle\" fill=\"#333\" font-size=\"20\">{}</text>\n",
-                tx, ty, svg_escape(txt)
-            ));
-        }
+    if let (Some(ny), Some(txt)) = (note_y_mm, p.note.as_ref()) {
+        let (tx, ty) = to_px(Point {
+            x: total_w_mm / 2.0,
+            y: ny,
+        });
+        s.push_str(&format!(
+            "<text x=\"{:.2}\" y=\"{:.2}\" text-anchor=\"middle\" fill=\"#333\" font-size=\"20\">{}</text>\n",
+            tx, ty, svg_escape(txt)
+        ));
     }
     if !board_geom.is_empty() {
         let (minx, miny, _maxx, _maxy) = board_bounds.unwrap();

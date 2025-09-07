@@ -67,6 +67,7 @@ pub async fn load_puzzle_from_text(state: Rc<RefCell<State>>, text: String) {
                 s.shapes_catalog = Some(catalog);
                 assign_piece_colors(&mut s.data);
                 s.initial_data = s.data.clone();
+                s.puzzle_name = "local".to_string();
                 update_note_dom(&s);
                 update_status_dom(&s);
                 draw(&mut s);
@@ -80,6 +81,7 @@ pub async fn load_puzzle_from_text(state: Rc<RefCell<State>>, text: String) {
         s.data = p;
         assign_piece_colors(&mut s.data);
         s.initial_data = s.data.clone();
+        s.puzzle_name = "local".to_string();
         update_note_dom(&s);
         update_status_dom(&s);
         draw(&mut s);

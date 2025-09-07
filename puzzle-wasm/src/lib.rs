@@ -469,7 +469,7 @@ fn draw(state: &mut State) {
         p.__geom_pl = Some(encode_polyline_mm(&geom));
         p.__ctr = Some(ctr);
         let color_idx = p.__color_idx.unwrap_or(i);
-        let color = puzzle_core::piece_color(color_idx);
+        let color = piece_color(color_idx);
         if p.type_ == "circle" {
             // Render true circle while computations use polyline
             let r = p.d.unwrap_or_else(|| p.r.unwrap_or(0.0) * 2.0) / 2.0;
@@ -590,6 +590,22 @@ fn decode_polyline_mm(s: &str) -> Vec<Point> {
             .collect(),
         Err(_) => Vec::new(),
     }
+}
+
+fn piece_color(i: usize) -> String {
+    // Fixed 8-color palette in the exact order: red, orange, yellow,
+    // green, cyan, blue, purple, pink. Colors are stable and cycle by index%8.
+    const PALETTE: [&str; 8] = [
+        "red",    // 红
+        "orange", // 橙
+        "yellow", // 黄
+        "green",  // 绿
+        "cyan",   // 青
+        "blue",   // 蓝
+        "purple", // 紫
+        "pink",   // 粉
+    ];
+    PALETTE[i % PALETTE.len()].to_string()
 }
 
 fn assign_piece_colors(p: &mut Puzzle) {
@@ -1506,7 +1522,7 @@ fn polygons_intersect(a: &[Point], b: &[Point]) -> bool {
     false
 }
 
-// color helper moved to puzzle-core
+// color helper integrated from former puzzle-core
 
 // (removed unused SVG helpers that triggered dead-code lints)
 
@@ -2245,16 +2261,20 @@ pub fn start() -> Result<(), JsValue> {
     let (canvas, ctx) = init_canvas(&document)?;
 
     let data = default_puzzle();
+    // Determine initial puzzle name from URL parameter if present
+    let mut puzzle_name = "k11".to_string();
     // If URL param p is set, fetch that; otherwise also fetch default 'k11' from server
     if let Ok(search) = window.location().search() {
         if let Some(p) = get_query_param(&search, "p") {
+            puzzle_name = p.clone();
             let win = window.clone();
             let doc = document.clone();
             let cv = canvas.clone();
             let ctx2 = ctx.clone();
+            let p_clone = p.clone();
             wasm_bindgen_futures::spawn_local(async move {
-                if let Err(err) = fetch_and_load_puzzle(win, doc, cv, ctx2, &p).await {
-                    log(&format!("Failed to load puzzle '{}': {:?}", p, err));
+                if let Err(err) = fetch_and_load_puzzle(win, doc, cv, ctx2, &p_clone).await {
+                    log(&format!("Failed to load puzzle '{}': {:?}", p_clone, err));
                 }
             });
         } else {
@@ -2276,7 +2296,7 @@ pub fn start() -> Result<(), JsValue> {
         canvas,
         ctx,
         data,
-        puzzle_name: "k11".to_string(),
+        puzzle_name,
         dragging_idx: None,
         drag_off: (0.0, 0.0),
         scale: DEFAULT_MM2PX,

@@ -15,7 +15,6 @@ Language can be switched in the UI.
 - `puzzle/`: Puzzle specs (counts + board; units default to mm). Notes are `note_en`/`note_zh`.
 - `puzzle-wasm/`: Rust crate compiled to WebAssembly
   (runtime + physics + UI glue).
-- `puzzle-core/`: Shared Rust code for the web runtime.
 - `blueprint-core/`: Optional PNG blueprint renderer used by the web export.
 - `web/`: Vite + React front‑end. `web/public/` is generated during build/dev.
 - `pkg/`: Generated WASM bundle from `wasm-pack` (created by `just build`).
@@ -56,8 +55,7 @@ Notes:
 - If a puzzle JSON is in counts format, the browser fetches `shapes.json` from
   the server first, and only falls back to the embedded copy if the request
   fails.
-- `puzzles.json` is used by the chooser. It does not contain `desc`; each
-  entry includes `id`, optional `title`, and `path`.
+- `puzzles.json` is used by the chooser. It maps puzzle names to JSON paths.
 
 ## JSON Formats
 

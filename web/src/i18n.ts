@@ -11,7 +11,7 @@ export const strings = {
     themeLight: "Light",
     themeDark: "Dark",
     themeAuto: "Auto",
-    help: "Drag; Q/E rotate (S toggles speed); L restrict; Shift temp restrict; F mirror",
+    help: "Drag; Q/E rotate; F flip; L lock; S toggle fast/slow mode; Shift temp lock",
     lockUnlocked: "Lock: Unlocked",
     lockLocked: "Lock: Locked",
     lockTemp: "Lock: Temporary",
@@ -30,6 +30,16 @@ export const strings = {
     success: "Success",
     collapse: "Collapse",
     expand: "Expand",
+    langEn: "English",
+    langZh: "中文",
+    tutorModal: {
+      title: "Tutorial",
+      close: "Close",
+      lines: [
+        "Controls: drag with mouse; Q/E rotate; F flip; L lock; S toggle fast/slow mode.",
+        "Adjustments: the two sliders set fast and slow rotation speeds.",
+      ],
+    },
   },
   zh: {
     home: "返回主页",
@@ -41,7 +51,7 @@ export const strings = {
     themeLight: "浅色",
     themeDark: "暗色",
     themeAuto: "自动",
-    help: "拖拽；Q/E旋转（S快/慢）；L限制移动；按住Shift临时限制；F镜像",
+    help: "拖拽；Q/E旋转；F翻转；L锁定；S切换快/慢模式；按住Shift临时锁定",
     lockUnlocked: "锁定：未锁定",
     lockLocked: "锁定：已锁定",
     lockTemp: "锁定：临时锁定",
@@ -60,5 +70,15 @@ export const strings = {
     success: "成功",
     collapse: "折叠",
     expand: "展开",
+    langEn: "English",
+    langZh: "中文",
+    tutorModal: {
+      title: "教程 / 快速上手",
+      close: "关闭",
+      lines: [
+        "按键说明：鼠标拖动，Q/E 旋转，F 翻转，L 锁定，S 切换快/慢模式。",
+        "调整说明：两个速度调节条分别控制快/慢旋转速度。",
+      ],
+    },
   },
 } as const;

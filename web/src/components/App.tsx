@@ -5,9 +5,9 @@ import React, {
   useState,
   useLayoutEffect,
 } from "react";
-import { strings, type Lang } from "./i18n";
-import { ThemeToggle } from "./theme";
-import { TutorialModal } from "./Tutorial";
+import { strings, type Lang } from "../i18n";
+import { ThemeToggle } from "../theme/ThemeToggle";
+import { TutorModal } from "./TutorModal";
 import Home from "./Home";
 
 // WASM bootstrapping: we will dynamically import the wasm-pack JS from /public
@@ -37,7 +37,7 @@ const App: React.FC = () => {
   }
 
   const [ready, setReady] = useState(false);
-  const [showTutorial, setShowTutorial] = useState(false);
+  const [showTutor, setShowTutor] = useState(false);
 
   const syncLang = () => {
     const sel = document.getElementById("langSel") as HTMLSelectElement | null;
@@ -101,13 +101,15 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (!ready) return;
-    const params = new URLSearchParams(location.search);
-    if (params.get("p") === "local") {
-      const txt = sessionStorage.getItem("uploadedPuzzle");
-      if (txt) {
-        (window as any).__puzzleWasm?.load_puzzle_from_text(txt);
-        sessionStorage.removeItem("uploadedPuzzle");
-      }
+    const txt = sessionStorage.getItem("uploadedPuzzle");
+    if (txt) {
+      (async () => {
+        try {
+          await (window as any).__puzzleWasm?.load_puzzle_from_text(txt);
+        } finally {
+          sessionStorage.removeItem("uploadedPuzzle");
+        }
+      })();
     }
   }, [ready]);
 
@@ -222,7 +224,7 @@ const App: React.FC = () => {
                   title={t.tutor}
                   onClick={(e) => {
                     e.preventDefault();
-                    setShowTutorial(true);
+                    setShowTutor(true);
                   }}
                 >
                   <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
@@ -334,8 +336,8 @@ const App: React.FC = () => {
             <ValidationPanel lang={lang} />
           </div>
         </div>
-        {showTutorial && (
-          <TutorialModal lang={lang} onClose={() => setShowTutorial(false)} />
+        {showTutor && (
+          <TutorModal lang={lang} onClose={() => setShowTutor(false)} />
         )}
       </div>
     </div>

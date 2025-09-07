@@ -1,27 +1,22 @@
 import React, { useEffect, useState } from "react";
-import { strings, type Lang } from "./i18n";
-import { ThemeToggle } from "./theme";
-
-interface PuzzleInfo {
-  id: string;
-  title?: string;
-  desc?: string;
-}
+import { strings, type Lang } from "../i18n";
+import { ThemeToggle } from "../theme/ThemeToggle";
 
 const Home: React.FC<{ lang: Lang; setLang: (lang: Lang) => void }> = ({
   lang,
   setLang,
 }) => {
   const t = strings[lang];
-  const [puzzles, setPuzzles] = useState<PuzzleInfo[]>([]);
+  const [puzzles, setPuzzles] = useState<string[]>([]);
 
   useEffect(() => {
     let cancelled = false;
     fetch("./puzzles.json")
-      .then((r) => (r.ok ? r.json() : []))
+      .then((r) => (r.ok ? r.json() : {}))
       .then((list) => {
         if (cancelled) return;
-        if (Array.isArray(list)) setPuzzles(list);
+        if (list && typeof list === "object")
+          setPuzzles(Object.keys(list as Record<string, string>));
       })
       .catch(() => void 0);
     return () => {
@@ -46,8 +41,8 @@ const Home: React.FC<{ lang: Lang; setLang: (lang: Lang) => void }> = ({
               value={lang}
               onChange={(e) => setLang(e.target.value as Lang)}
             >
-              <option value="en">English</option>
-              <option value="zh">中文</option>
+              <option value="en">{t.langEn}</option>
+              <option value="zh">{t.langZh}</option>
             </select>
             <label style={{ marginLeft: 6 }}>{t.theme}</label>
             <ThemeToggle
@@ -88,10 +83,12 @@ const Home: React.FC<{ lang: Lang; setLang: (lang: Lang) => void }> = ({
                     if (!file) return;
                     const text = await file.text();
                     sessionStorage.setItem("uploadedPuzzle", text);
-                    location.href = "?p=local";
+                    e.target.value = "";
+                    window.location.href = "./?p=local";
                   }}
                 />
                 <button
+                  type="button"
                   onClick={() =>
                     (
                       document.getElementById(
@@ -105,12 +102,9 @@ const Home: React.FC<{ lang: Lang; setLang: (lang: Lang) => void }> = ({
               </p>
               <h2 style={{ margin: "0 0 12px" }}>{t.selectPuzzle}</h2>
               <ul className="chooser">
-                {puzzles.map((item) => (
-                  <li key={item.id}>
-                    <a href={`?p=${encodeURIComponent(item.id)}`}>
-                      {item.title || item.id}
-                    </a>
-                    {item.desc && <span>— {item.desc}</span>}
+                {puzzles.map((name) => (
+                  <li key={name}>
+                    <a href={`?p=${encodeURIComponent(name)}`}>{name}</a>
                   </li>
                 ))}
               </ul>

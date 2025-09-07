@@ -1,4 +1,4 @@
-import { strings, type Lang } from "./ui/i18n";
+import { strings, type Lang } from "./i18n";
 
 (function () {
   // Apply theme preference

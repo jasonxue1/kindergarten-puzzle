@@ -245,31 +245,32 @@
         gap: 12px;
       }
       .chooser li {
-        border: 1px solid var(--ctp-latte-surface0);
         border-radius: 8px;
-        padding: 12px;
-        text-align: center;
-        background: var(--ctp-latte-mantle);
-      }
-      .chooser li:hover {
-        background: color-mix(in oklab, var(--ctp-latte-mantle), black 10%);
       }
       .chooser li a {
+        display: block;
+        padding: 12px;
+        border: 1px solid var(--ctp-latte-surface0);
+        border-radius: 8px;
+        text-align: center;
+        background: var(--ctp-latte-mantle);
         text-decoration: none;
         color: inherit;
-        display: block;
       }
-      .chooser li span {
+      .chooser li a:hover {
+        background: color-mix(in oklab, var(--ctp-latte-mantle), black 10%);
+      }
+      .chooser li a span {
         display: block;
         margin-top: 4px;
         font-size: 0.85em;
         opacity: 0.8;
       }
-      html[data-theme="dark"] .chooser li {
+      html[data-theme="dark"] .chooser li a {
         border-color: var(--ctp-mocha-surface0);
         background: var(--ctp-mocha-mantle);
       }
-      html[data-theme="dark"] .chooser li:hover {
+      html[data-theme="dark"] .chooser li a:hover {
         background: color-mix(in oklab, var(--ctp-mocha-mantle), black 10%);
       }
     </style>
