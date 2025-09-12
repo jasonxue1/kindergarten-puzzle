@@ -45,17 +45,7 @@ async function main() {
       force: true,
     });
   }
-  const pkgSrc = path.join(repoRoot, "pkg");
-  if (await exists(pkgSrc)) {
-    await cp(pkgSrc, path.join(publicDir, "pkg"), {
-      recursive: true,
-      force: true,
-    });
-  } else {
-    console.warn(
-      "[dev-prepare] pkg/ not found. Run `just build` first to generate WASM bundle.",
-    );
-  }
+  // WASM bundle should already be placed in web/public/pkg by the build step (see Justfile)
 }
 
 main().catch((e) => {

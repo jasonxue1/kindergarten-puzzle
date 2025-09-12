@@ -3,13 +3,13 @@
 set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
 
 CRATE_DIR := "puzzle-wasm"
-OUT_DIR := "pkg"
+OUT_DIR := "web/public/pkg"
 
 default: build
 
 # Build optimized WASM bundle to ./pkg for GitHub Pages
 build:
-    # wasm-pack uses the crate dir as the base for --out-dir; use ../ to place pkg at repo root
+    # wasm-pack uses the crate dir as the base for --out-dir; use ../ to place output under repo root
     wasm-pack build --target web --release --out-dir ../{{ OUT_DIR }} {{ CRATE_DIR }}
 
 # Clean generated artifacts

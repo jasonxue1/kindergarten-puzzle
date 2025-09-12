@@ -17,7 +17,7 @@ Language can be switched in the UI.
   (runtime + physics + UI glue).
 - `blueprint-core/`: Optional PNG blueprint renderer used by the web export.
 - `web/`: Vite + React front‑end. `web/public/` is generated during build/dev.
-- `pkg/`: Generated WASM bundle from `wasm-pack` (created by `just build`).
+- `web/public/pkg/`: Generated WASM bundle from `wasm-pack` (created by `just build`).
 
 ## Build and Run
 
@@ -29,10 +29,10 @@ Using the provided Justfile:
 # Optional: enter Nix dev shell (provides tools)
 nix develop
 
-# Build optimized WASM to ./pkg
+# Build optimized WASM to web/public/pkg
 just build
 
-# Start the web app (copies JSON + pkg into web/public)
+# Start the web app (prepares public assets)
 just serve
 ```
 
@@ -43,7 +43,6 @@ Notes:
 - `web/public/` is not tracked by git. The script `web/scripts/dev-prepare.mjs`
   creates it and copies:
   - `puzzles.json`, `shapes.json`, `puzzle/` from repo root
-  - `pkg/` from repo root (WASM bundle)
   - plus a small `wasm-bridge.js` used to load the WASM module
 - Production build: `cd web && pnpm install && pnpm build`
   (runs the same prepare step automatically and outputs `web/dist/`).

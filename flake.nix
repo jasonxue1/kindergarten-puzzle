@@ -19,7 +19,7 @@
           inherit system;
           overlays = [(import rust-overlay)];
         };
-        rust = pkgs.rust-bin.nightly.latest.complete.override {
+        rust = pkgs.rust-bin.stable.latest.complete.override {
           targets = [
             "wasm32-unknown-unknown"
           ];
