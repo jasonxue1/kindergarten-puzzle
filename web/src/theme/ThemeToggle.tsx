@@ -26,11 +26,16 @@ export function useTheme() {
   // Apply immediately and on system changes when auto
   useEffect(() => {
     applyTheme(pref);
-    if (pref !== "auto") return;
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     const onChange = () => applyTheme("auto");
-    mq.addEventListener?.("change", onChange);
-    return () => mq.removeEventListener?.("change", onChange);
+    let added = false;
+    if (pref === "auto") {
+      mq.addEventListener?.("change", onChange);
+      added = true;
+    }
+    return () => {
+      if (added) mq.removeEventListener?.("change", onChange);
+    };
   }, [pref]);
 
   const set = useMemo(

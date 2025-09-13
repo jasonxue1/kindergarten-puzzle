@@ -1,3 +1,4 @@
+/* eslint-env node */
 import { cp, mkdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 

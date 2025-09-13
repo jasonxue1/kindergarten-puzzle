@@ -1,10 +1,7 @@
 import React from "react";
 import { strings, type Lang } from "../i18n";
 
-export const TutorModal: React.FC<{ lang: Lang; onClose: () => void }> = ({
-  lang,
-  onClose,
-}) => {
+export const TutorModal: React.FC<{ lang: Lang; onClose: () => void }> = ({ lang, onClose }) => {
   const t = strings[lang].tutorModal;
   return (
     <div
@@ -32,12 +29,7 @@ export const TutorModal: React.FC<{ lang: Lang; onClose: () => void }> = ({
       >
         <div style={{ display: "flex", alignItems: "center" }}>
           <h2 style={{ margin: "0 0 12px 0", flex: 1 }}>{t.title}</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="icon-btn"
-            title={t.close}
-          >
+          <button type="button" onClick={onClose} className="icon-btn" title={t.close}>
             <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
               <path
                 d={
@@ -49,8 +41,8 @@ export const TutorModal: React.FC<{ lang: Lang; onClose: () => void }> = ({
             <span>{t.close}</span>
           </button>
         </div>
-        {t.lines.map((line, i) => (
-          <p key={i} style={{ margin: "8px 0" }}>
+        {t.lines.map((line) => (
+          <p key={line} style={{ margin: "8px 0" }}>
             {line}
           </p>
         ))}

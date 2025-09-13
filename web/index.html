@@ -4,10 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Kindergarten Puzzle</title>
-    <meta
-      name="description"
-      content="A modern puzzle inspired by a kindergarten teaching tool."
-    />
+    <meta name="description" content="A modern puzzle inspired by a kindergarten teaching tool." />
     <style>
       html,
       body {
@@ -61,8 +58,7 @@
       .card {
         background: var(--ctp-latte-base);
         border-radius: 12px;
-        box-shadow: 0 8px 24px
-          color-mix(in oklab, var(--ctp-latte-crust), transparent 90%);
+        box-shadow: 0 8px 24px color-mix(in oklab, var(--ctp-latte-crust), transparent 90%);
         overflow: hidden;
         border: 1px solid var(--ctp-latte-surface0);
         height: 100%;
@@ -72,8 +68,7 @@
 
       html[data-theme="dark"] .card {
         background: var(--ctp-mocha-base);
-        box-shadow: 0 8px 24px
-          color-mix(in oklab, var(--ctp-mocha-crust), transparent 75%);
+        box-shadow: 0 8px 24px color-mix(in oklab, var(--ctp-mocha-crust), transparent 75%);
         border-color: var(--ctp-mocha-surface0);
       }
 
@@ -320,19 +315,11 @@
           display: grid;
           place-items: center;
           z-index: 9999;
-          background: color-mix(
-            in oklab,
-            var(--ctp-latte-crust),
-            transparent 10%
-          );
+          background: color-mix(in oklab, var(--ctp-latte-crust), transparent 10%);
         }
 
         html[data-theme="dark"] #loading {
-          background: color-mix(
-            in oklab,
-            var(--ctp-mocha-crust),
-            transparent 10%
-          );
+          background: color-mix(in oklab, var(--ctp-mocha-crust), transparent 10%);
         }
 
         #loading .box {
@@ -345,15 +332,13 @@
           border: 1px solid var(--ctp-latte-surface0);
           background: var(--ctp-latte-base);
           color: inherit;
-          box-shadow: 0 8px 24px
-            color-mix(in oklab, var(--ctp-latte-crust), transparent 85%);
+          box-shadow: 0 8px 24px color-mix(in oklab, var(--ctp-latte-crust), transparent 85%);
         }
 
         html[data-theme="dark"] #loading .box {
           border-color: var(--ctp-mocha-surface0);
           background: var(--ctp-mocha-base);
-          box-shadow: 0 8px 24px
-            color-mix(in oklab, var(--ctp-mocha-crust), transparent 70%);
+          box-shadow: 0 8px 24px color-mix(in oklab, var(--ctp-mocha-crust), transparent 70%);
         }
 
         #loading .spinner {

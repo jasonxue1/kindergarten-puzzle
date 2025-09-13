@@ -1,15 +1,10 @@
-import React, {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useLayoutEffect,
-} from "react";
+import React, { useEffect, useMemo, useRef, useState, useLayoutEffect, useCallback } from "react";
 import { strings, type Lang } from "../i18n";
 import { ThemeToggle } from "../theme/ThemeToggle";
 import { TutorModal } from "./TutorModal";
 import Home from "./Home";
 import { takeUploadedPuzzle } from "../utils/localFile";
+import type { PuzzleWasm } from "../global";
 
 // WASM bootstrapping: we will dynamically import the wasm-pack JS from /public
 // so Vite doesn't try to process it. See useEffect below.
@@ -29,18 +24,25 @@ const App: React.FC = () => {
     document.documentElement.setAttribute("lang", lang);
   }, [lang]);
   const t = useMemo(() => strings[lang], [lang]);
-  const hasParamP = useMemo(
-    () => new URLSearchParams(location.search).get("p") != null,
-    [],
-  );
+  const hasParamP = useMemo(() => new URLSearchParams(location.search).get("p") != null, []);
   if (!hasParamP) {
     return <Home lang={lang} setLang={setLang} />;
   }
 
+  return <PuzzleApp lang={lang} setLang={setLang} t={t} />;
+};
+
+export default App;
+
+const PuzzleApp: React.FC<{
+  lang: Lang;
+  setLang: (l: Lang) => void;
+  t: (typeof strings)[keyof typeof strings];
+}> = ({ lang, setLang, t }) => {
   const [ready, setReady] = useState(false);
   const [showTutor, setShowTutor] = useState(false);
 
-  const syncLang = () => {
+  const syncLang = useCallback(() => {
     const sel = document.getElementById("langSel") as HTMLSelectElement | null;
     if (sel) {
       if (sel.value !== lang) sel.value = lang;
@@ -49,7 +51,7 @@ const App: React.FC = () => {
     try {
       localStorage.setItem("lang", lang);
     } catch {}
-  };
+  }, [lang]);
 
   useEffect(() => {
     // Initialize the existing WASM app which expects specific element IDs present in the DOM.
@@ -57,48 +59,44 @@ const App: React.FC = () => {
       try {
         const base = import.meta.env.BASE_URL || "/";
         // Expose base to WASM before it runs so relative fetches work in dev and prod
-        (window as any).__BASE_URL = base.endsWith("/") ? base : base + "/";
+        window.__BASE_URL = base.endsWith("/") ? base : `${base}/`;
         const wasmUrl = `${base}pkg/puzzle_wasm_bg.wasm`;
 
         // Load bridge module from public to avoid Vite processing of /public assets
         async function ensureBridge(): Promise<void> {
-          if ((window as any).__puzzleWasmInit) return;
+          if (window.__puzzleWasmInit) return;
           await new Promise<void>((resolve, reject) => {
             const s = document.createElement("script");
             s.type = "module";
             s.src = `${base}wasm-bridge.js`;
             s.onload = () => resolve();
-            s.onerror = () =>
-              reject(new Error("Failed to load wasm-bridge.js"));
+            s.onerror = () => reject(new Error("Failed to load wasm-bridge.js"));
             document.head.appendChild(s);
           });
         }
 
         await ensureBridge();
-        const init = (window as any).__puzzleWasmInit as (
-          u: string,
-        ) => Promise<any>;
+        const init = window.__puzzleWasmInit as (u: string) => Promise<PuzzleWasm>;
         const wasm = await init(wasmUrl);
-        (window as any).__puzzleWasm = wasm;
+        window.__puzzleWasm = wasm;
         // Mark app as ready: show UI and remove loading overlay
         document.documentElement.classList.add("app-ready");
         const loading = document.getElementById("loading");
-        if (loading && loading.parentElement)
-          loading.parentElement.removeChild(loading);
+        if (loading && loading.parentElement) loading.parentElement.removeChild(loading);
         setReady(true);
-        syncLang();
       } catch (err) {
         const el = document.getElementById("loadingText");
-        if (el) el.textContent = strings[lang].loadFailed;
+        if (el) el.textContent = "Load failed";
         console.error(err);
       }
     })();
   }, []);
 
+  // Keep the legacy Rust UI in sync on initial ready and when language changes
   useEffect(() => {
-    // Keep the legacy Rust UI in sync: set value on #langSel and fire change
+    if (!ready) return;
     syncLang();
-  }, [lang]);
+  }, [ready, syncLang]);
 
   // When arriving from the landing page with an uploaded puzzle, forward the
   // text to the WASM loader once it's ready.
@@ -107,7 +105,7 @@ const App: React.FC = () => {
     const txt = takeUploadedPuzzle();
     if (txt) {
       (async () => {
-        await (window as any).__puzzleWasm?.load_puzzle_from_text(txt);
+        await window.__puzzleWasm?.load_puzzle_from_text(txt);
       })();
     }
   }, [ready]);
@@ -119,7 +117,7 @@ const App: React.FC = () => {
   useLayoutEffect(() => {
     const cv = canvasRef.current;
     const wrap = boardWrapRef.current;
-    if (!cv || !wrap) return;
+    if (!cv || !wrap) return () => {};
     const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
     const resize = () => {
       const rect = wrap.getBoundingClientRect();
@@ -160,24 +158,20 @@ const App: React.FC = () => {
         aria-busy={!ready}
         aria-hidden={!ready}
         style={
-          !ready
-            ? { filter: "blur(2px)", pointerEvents: "none", userSelect: "none" }
-            : undefined
+          !ready ? { filter: "blur(2px)", pointerEvents: "none", userSelect: "none" } : undefined
         }
       >
         <div className="card">
           <div id="bar">
             {/* First row: controls except speed */}
-            <div
-              className="toolbar"
-              style={{ display: "flex", gap: 8, alignItems: "center" }}
-            >
+            <div className="toolbar" style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                 <button
                   id="homeBtn"
                   className="icon-btn"
-                  style={{ display: hasParamP ? "inline-flex" : "none" }}
+                  style={{ display: "inline-flex" }}
                   title={t.home}
+                  type="button"
                   onClick={() => (window.location.href = "./")}
                 >
                   <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
@@ -185,31 +179,25 @@ const App: React.FC = () => {
                   </svg>
                   <span>{t.home}</span>
                 </button>
-                <button id="resetPuzzle" className="icon-btn" title={t.reset}>
+                <button id="resetPuzzle" className="icon-btn" title={t.reset} type="button">
                   <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
                     <path d="M12 6V3L8 7l4 4V8c2.76 0 5 2.24 5 5a5 5 0 11-9.9-1h-2.02a7 7 0 1012.92 3c0-3.87-3.13-7-7-7z" />
                   </svg>
                   <span>{t.reset}</span>
                 </button>
-                <button id="exportPng" className="icon-btn" title={t.download}>
+                <button id="exportPng" className="icon-btn" title={t.download} type="button">
                   <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
                     <path d="M5 20h14v-2H5v2zm7-18l-5.5 5.5h3.5V15h4V7.5H17.5L12 2z" />
                   </svg>
                   <span>{t.download}</span>
                 </button>
-                <input
-                  type="file"
-                  id="file"
-                  accept=".json"
-                  style={{ display: "none" }}
-                />
+                <input type="file" id="file" accept=".json" style={{ display: "none" }} />
                 <button
                   className="icon-btn"
                   title={t.loadLocal}
+                  type="button"
                   onClick={() =>
-                    (
-                      document.getElementById("file") as HTMLInputElement | null
-                    )?.click()
+                    (document.getElementById("file") as HTMLInputElement | null)?.click()
                   }
                 >
                   <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
@@ -221,6 +209,7 @@ const App: React.FC = () => {
                   id="tutorBtn"
                   className="icon-btn"
                   title={t.tutor}
+                  type="button"
                   onClick={(e) => {
                     e.preventDefault();
                     setShowTutor(true);
@@ -235,11 +224,7 @@ const App: React.FC = () => {
               <span className="spacer" aria-hidden style={{ flex: 1 }} />
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <label htmlFor="langSel">{t.language}</label>
-                <select
-                  id="langSel"
-                  value={lang}
-                  onChange={(e) => setLang(e.target.value as Lang)}
-                >
+                <select id="langSel" value={lang} onChange={(e) => setLang(e.target.value as Lang)}>
                   <option value="en">English</option>
                   <option value="zh">中文</option>
                 </select>
@@ -255,10 +240,7 @@ const App: React.FC = () => {
             </div>
 
             {/* Second row: speed controls */}
-            <div
-              className="toolbar"
-              style={{ display: "flex", gap: 16, alignItems: "center" }}
-            >
+            <div className="toolbar" style={{ display: "flex", gap: 16, alignItems: "center" }}>
               <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                 <label htmlFor="fastSpeedSlider">{t.speedFast}</label>
                 <input
@@ -335,15 +317,11 @@ const App: React.FC = () => {
             <ValidationPanel lang={lang} />
           </div>
         </div>
-        {showTutor && (
-          <TutorModal lang={lang} onClose={() => setShowTutor(false)} />
-        )}
+        {showTutor && <TutorModal lang={lang} onClose={() => setShowTutor(false)} />}
       </div>
     </div>
   );
 };
-
-export default App;
 
 const ValidationPanel: React.FC<{ lang: Lang }> = ({ lang }) => {
   const [open, setOpen] = useState(true);
@@ -356,14 +334,12 @@ const ValidationPanel: React.FC<{ lang: Lang }> = ({ lang }) => {
         width: open ? 300 : 36,
       }}
     >
-      <div
-        className="panel-header"
-        style={{ display: "flex", alignItems: "center" }}
-      >
+      <div className="panel-header" style={{ display: "flex", alignItems: "center" }}>
         <button
           className="icon-btn"
           aria-label={open ? t.collapse : t.expand}
           title={open ? t.collapse : t.expand}
+          type="button"
           onClick={() => setOpen(!open)}
           style={{
             padding: 4,
@@ -375,9 +351,7 @@ const ValidationPanel: React.FC<{ lang: Lang }> = ({ lang }) => {
         >
           <span aria-hidden>{open ? "⟨" : "⟩"}</span>
         </button>
-        {open && (
-          <h3 style={{ margin: "0 0 0 8px", fontSize: 16 }}>{t.validation}</h3>
-        )}
+        {open && <h3 style={{ margin: "0 0 0 8px", fontSize: 16 }}>{t.validation}</h3>}
       </div>
       {open && (
         <div

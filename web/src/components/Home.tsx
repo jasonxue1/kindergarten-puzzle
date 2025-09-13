@@ -1,10 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { strings, type Lang } from "../i18n";
 import { ThemeToggle } from "../theme/ThemeToggle";
-const Home: React.FC<{ lang: Lang; setLang: (lang: Lang) => void }> = ({
-  lang,
-  setLang,
-}) => {
+const Home: React.FC<{ lang: Lang; setLang: (lang: Lang) => void }> = ({ lang, setLang }) => {
   const t = strings[lang];
   const [puzzles, setPuzzles] = useState<string[]>([]);
 
@@ -26,20 +23,10 @@ const Home: React.FC<{ lang: Lang; setLang: (lang: Lang) => void }> = ({
   return (
     <div className="page">
       <div className="container">
-        <div
-          className="card"
-          style={{ display: "flex", flexDirection: "column" }}
-        >
-          <div
-            className="toolbar"
-            style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}
-          >
+        <div className="card" style={{ display: "flex", flexDirection: "column" }}>
+          <div className="toolbar" style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
             <label htmlFor="homeLangSel">{t.language}</label>
-            <select
-              id="homeLangSel"
-              value={lang}
-              onChange={(e) => setLang(e.target.value as Lang)}
-            >
+            <select id="homeLangSel" value={lang} onChange={(e) => setLang(e.target.value as Lang)}>
               <option value="en">{t.langEn}</option>
               <option value="zh">{t.langZh}</option>
             </select>
@@ -53,9 +40,7 @@ const Home: React.FC<{ lang: Lang; setLang: (lang: Lang) => void }> = ({
             />
           </div>
           <div style={{ flex: 1, overflowY: "auto", padding: "24px" }}>
-            <div
-              style={{ maxWidth: 720, margin: "0 auto", textAlign: "center" }}
-            >
+            <div style={{ maxWidth: 720, margin: "0 auto", textAlign: "center" }}>
               <h1 style={{ margin: "0 0 8px" }}>Kindergarten Puzzle</h1>
               <p style={{ margin: "0 0 16px" }}>{t.landingIntro}</p>
               <p style={{ margin: "0 0 20px" }}>

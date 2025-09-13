@@ -4,6 +4,7 @@ set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
 
 CRATE_DIR := "puzzle-wasm"
 OUT_DIR := "web/public/pkg"
+TOML_FILES := "Cargo.toml wrangler.toml mado.toml taplo.toml blueprint-core/Cargo.toml fonts/Cargo.toml puzzle-wasm/Cargo.toml"
 
 default: build
 
@@ -19,20 +20,28 @@ clean:
 
 # Serve the app locally using pnpm (modern web UI)
 serve:
-    cd web && pnpm install && pnpm dev
+    pnpm -C web install
+    pnpm -C web dev
 
 # Format all code and content
 fmt:
     cargo fmt --all
-    taplo format
-    prettier --write .
+    # Limit Taplo to concrete TOML files to avoid slow repo-wide scanning
+    taplo format --config taplo.toml {{ TOML_FILES }}
+    # Use pnpm-managed Prettier in web/
+    pnpm -C web install
+    pnpm -C web format
     mdsf format .
     alejandra -q .
 
 # Lint sources
 lint:
-    taplo check
+    # Check only specific TOML files for speed
+    taplo check --config taplo.toml {{ TOML_FILES }}
     cargo check --workspace
     cargo clippy --workspace --all-targets --all-features -- -D warnings
     mado check
     deadnix --fail .
+    # Run ESLint via pnpm in web/
+    pnpm -C web install
+    pnpm -C web lint
