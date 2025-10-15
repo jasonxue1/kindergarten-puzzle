@@ -11,4 +11,4 @@ name = "fonts"
 path = "src/lib.rs"
 
 [build-dependencies]
-zip = { version = "5", default-features = true }
+zip = { version = "6", default-features = true }
